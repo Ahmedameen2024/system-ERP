@@ -1,0 +1,19 @@
+{
+  "name": "stitch-erp",
+  "version": "1.0.0",
+  "description": "Enterprise ERP System - React + Node.js + PostgreSQL",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install",
+    "db:init": "node database/init.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "pg": "^8.22.0"
+  }
+}
