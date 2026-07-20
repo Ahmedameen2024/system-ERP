@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuthStore } from '../../store/authStore';
 import api from '../../api/client';
 
 interface Customer {
@@ -56,12 +57,45 @@ export default function CustomersPage() {
       if (editItem) return api.put(`/sales/customers/${editItem.id}`, data);
       return api.post('/sales/customers', data);
     },
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       qc.invalidateQueries({ queryKey: ['customers'] });
       setShowModal(false);
       setEditItem(null);
+      try {
+        const msg = res?.data?.message || res?.message || 'تم حفظ العميل بنجاح';
+        alert(msg);
+      } catch (e) {
+        alert('تم حفظ العميل بنجاح');
+      }
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message || err?.message || 'حدث خطأ أثناء حفظ العميل';
+      alert(msg);
     }
   });
+
+  const deleteMutation = useMutation<void, any, string>({
+    mutationFn: async (id: string) => {
+      await api.delete(`/sales/customers/${id}`);
+    },
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: ['customers'] });
+      const previous = qc.getQueryData<Customer[]>(['customers']);
+      qc.setQueryData(['customers'], (old: Customer[] | undefined) => (old || []).filter(c => c.id !== id));
+      return { previous };
+    },
+    onError: (err: any, id, context: any) => {
+      if (context?.previous) qc.setQueryData(['customers'], context.previous);
+      const msg = err?.response?.data?.message || err?.message || 'فشل حذف العميل';
+      alert(msg);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers'] });
+      alert('تم حذف العميل بنجاح');
+    }
+  });
+
+  const auth = useAuthStore();
 
   const filtered = customers.filter(c =>
     c.code.toLowerCase().includes(search.toLowerCase()) ||
@@ -184,6 +218,20 @@ export default function CustomersPage() {
                     <button className="btn btn-ghost btn-sm" onClick={() => openEdit(c)} title="تعديل">
                       <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
                     </button>
+                    {/** show delete if user has permission or if no permission model available (backend enforces) */}
+                    {(auth.hasPermission?.('Sales', 'Customers', 'delete') ?? true) && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          if (!confirm(`هل أنت متأكد من حذف العميل ${c.name_ar}؟ هذه العملية لا يمكن التراجع عنها.`)) return;
+                          deleteMutation.mutate(c.id);
+                        }}
+                        title="حذف"
+                        disabled={deleteMutation.isPending}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#b91c1c' }}>delete</span>
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
