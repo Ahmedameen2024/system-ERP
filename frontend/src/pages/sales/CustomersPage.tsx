@@ -84,7 +84,7 @@ export default function CustomersPage() {
       qc.setQueryData(['customers'], (old: Customer[] | undefined) => (old || []).filter(c => c.id !== id));
       return { previous };
     },
-    onError: (err: any, id, context: any) => {
+    onError: (err: any, _id, context: any) => {
       if (context?.previous) qc.setQueryData(['customers'], context.previous);
       const msg = err?.response?.data?.message || err?.message || 'فشل حذف العميل';
       alert(msg);
