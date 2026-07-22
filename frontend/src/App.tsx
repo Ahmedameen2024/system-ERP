@@ -15,6 +15,7 @@ const AccountDetails = React.lazy(() => import('./pages/accounting/AccountDetail
 const FinancialStatements = React.lazy(() => import('./pages/accounting/FinancialStatements'));
 const JournalEntries = React.lazy(() => import('./pages/accounting/JournalEntries'));
 const SystemConfiguration = React.lazy(() => import('./pages/system/SystemConfiguration'));
+const CashBanksManagement = React.lazy(() => import('./pages/system/CashBanksManagement'));
 const BranchManagement = React.lazy(() => import('./pages/system/BranchManagement'));
 const CurrencyRates = React.lazy(() => import('./pages/system/CurrencyRates'));
 const UsersPermissions = React.lazy(() => import('./pages/system/UsersPermissions'));
@@ -137,6 +138,7 @@ export default function App() {
 
               {/* System */}
               <Route path="system" element={<SystemConfiguration />} />
+              <Route path="system/cash-banks" element={<CashBanksManagement />} />
               <Route path="system/branches" element={<BranchManagement />} />
               <Route path="system/currencies" element={<CurrencyRates />} />
               <Route path="system/users" element={<UsersPermissions />} />

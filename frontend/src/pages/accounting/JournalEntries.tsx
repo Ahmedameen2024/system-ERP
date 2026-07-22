@@ -15,6 +15,35 @@ interface CostCenter {
   name_ar: string;
 }
 
+interface CashBox {
+  id: string;
+  code: string;
+  name_ar: string;
+  gl_account_id: string;
+}
+
+interface BankAccount {
+  id: string;
+  code: string;
+  name_ar: string;
+  account_number: string;
+  gl_account_id: string;
+}
+
+interface Customer {
+  id: string;
+  code: string;
+  name_ar: string;
+  ar_account_id?: string;
+}
+
+interface Supplier {
+  id: string;
+  code: string;
+  name_ar: string;
+  ap_account_id?: string;
+}
+
 interface JournalEntry {
   id: string;
   entry_number: string;
@@ -31,15 +60,23 @@ interface JournalLine {
   id: string;
   glAccountId: string;
   costCenterId: string;
+  cashBoxId?: string;
+  bankAccountId?: string;
+  customerId?: string;
+  supplierId?: string;
   description: string;
   debit: string;
   credit: string;
 }
 
-const EMPTY_LINE = {
+const EMPTY_LINE: JournalLine = {
   id: `line-${Date.now()}`,
   glAccountId: '',
   costCenterId: '',
+  cashBoxId: '',
+  bankAccountId: '',
+  customerId: '',
+  supplierId: '',
   description: '',
   debit: '',
   credit: '',
@@ -93,6 +130,42 @@ export default function JournalEntries() {
     initialData: [],
   });
 
+  const { data: cashBoxes = [] } = useQuery({
+    queryKey: ['cash-boxes-lookup'],
+    queryFn: async () => {
+      const res = await api.get('/setup/cash-boxes');
+      return (res.data.data?.items || res.data.data || []) as CashBox[];
+    },
+    initialData: [],
+  });
+
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: ['bank-accounts-lookup'],
+    queryFn: async () => {
+      const res = await api.get('/setup/bank-accounts');
+      return (res.data.data?.items || res.data.data || []) as BankAccount[];
+    },
+    initialData: [],
+  });
+
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers-lookup'],
+    queryFn: async () => {
+      const res = await api.get('/sales/customers');
+      return (res.data.data?.items || res.data.data || []) as Customer[];
+    },
+    initialData: [],
+  });
+
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ['suppliers-lookup'],
+    queryFn: async () => {
+      const res = await api.get('/setup/suppliers').catch(() => api.get('/purchasing/suppliers'));
+      return (res.data.data?.items || res.data.data || []) as Supplier[];
+    },
+    initialData: [],
+  });
+
   const filteredEntries = useMemo(
     () =>
       entries.filter((entry) => {
@@ -129,6 +202,10 @@ export default function JournalEntries() {
     lines: {
       glAccountId: string;
       costCenterId: string | null;
+      cashBoxId?: string | null;
+      bankAccountId?: string | null;
+      customerId?: string | null;
+      supplierId?: string | null;
       description: string;
       debit: number;
       credit: number;
@@ -151,7 +228,7 @@ export default function JournalEntries() {
         currencyId: '',
         exchangeRate: '1',
         description: '',
-        lines: [EMPTY_LINE],
+        lines: [{ ...EMPTY_LINE, id: `line-${Date.now()}` }],
       });
     },
     onError: (error: any) => {
@@ -160,12 +237,53 @@ export default function JournalEntries() {
   });
 
   const updateLine = (index: number, field: keyof JournalLine, value: string) => {
-    setForm((current) => ({
-      ...current,
-      lines: current.lines.map((line, idx) =>
-        idx === index ? { ...line, [field]: value } : line
-      ),
-    }));
+    setForm((current) => {
+      const newLines = current.lines.map((line, idx) => {
+        if (idx !== index) return line;
+
+        const updated = { ...line, [field]: value };
+
+        // Auto-suggest GL Account when Cash Box selected
+        if (field === 'cashBoxId' && value) {
+          const cb = cashBoxes.find((item) => item.id === value);
+          if (cb && cb.gl_account_id) {
+            updated.glAccountId = cb.gl_account_id;
+          }
+          updated.bankAccountId = '';
+        }
+
+        // Auto-suggest GL Account when Bank Account selected
+        if (field === 'bankAccountId' && value) {
+          const ba = bankAccounts.find((item) => item.id === value);
+          if (ba && ba.gl_account_id) {
+            updated.glAccountId = ba.gl_account_id;
+          }
+          updated.cashBoxId = '';
+        }
+
+        // Auto-suggest AR account for Customer
+        if (field === 'customerId' && value) {
+          const cust = customers.find((item) => item.id === value);
+          if (cust && cust.ar_account_id) {
+            updated.glAccountId = cust.ar_account_id;
+          }
+          updated.supplierId = '';
+        }
+
+        // Auto-suggest AP account for Supplier
+        if (field === 'supplierId' && value) {
+          const supp = suppliers.find((item) => item.id === value);
+          if (supp && supp.ap_account_id) {
+            updated.glAccountId = supp.ap_account_id;
+          }
+          updated.customerId = '';
+        }
+
+        return updated;
+      });
+
+      return { ...current, lines: newLines };
+    });
     setErrorMessage('');
   };
 
@@ -203,6 +321,10 @@ export default function JournalEntries() {
       lines: form.lines.map((line) => ({
         glAccountId: line.glAccountId,
         costCenterId: line.costCenterId || null,
+        cashBoxId: line.cashBoxId || null,
+        bankAccountId: line.bankAccountId || null,
+        customerId: line.customerId || null,
+        supplierId: line.supplierId || null,
         description: line.description,
         debit: Number(line.debit) || 0,
         credit: Number(line.credit) || 0,
@@ -216,15 +338,15 @@ export default function JournalEntries() {
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start' }}>
         <div>
-          <h1 style={{ fontSize: '1.375rem', fontWeight: 800, margin: 0 }}>قيود اليومية</h1>
+          <h1 style={{ fontSize: '1.375rem', fontWeight: 800, margin: 0 }}>قيود اليومية المحاسبية</h1>
           <p style={{ margin: '0.5rem 0 0', color: 'var(--color-on-surface-variant)' }}>
-            شاشة إنشاء وعرض القيود اليومية مع التحقق من القيد المزدوج قبل الاعتماد والترحيل.
+            شاشة إنشاء وعرض القيود اليومية مع دعم ربط الصناديق والبنوك والعملاء والموردين ومراكز التكلفة
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={() => navigate('/accounting/transaction-analysis')}>
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
-            العودة لتحليل المعاملات
+            تحليل المعاملات
           </button>
           <button className="btn btn-primary btn-sm" onClick={() => setShowNew((prev) => !prev)}>
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
@@ -240,7 +362,7 @@ export default function JournalEntries() {
               <div>
                 <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>أحدث القيود</h2>
                 <p style={{ margin: '0.35rem 0 0', color: 'var(--color-on-surface-variant)', fontSize: '0.875rem' }}>
-                  عرض أحدث ١٠٠ قيد مع إمكانية البحث والتصفية.
+                  عرض أحدث القيود مع إمكانية البحث والتصفية.
                 </p>
               </div>
             </div>
@@ -249,125 +371,135 @@ export default function JournalEntries() {
               <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
                 <span className="material-symbols-outlined" style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-outline)', fontSize: 18 }}>search</span>
                 <input
+                  type="text"
                   className="input"
-                  placeholder="بحث برقم القيد أو البيان..."
+                  style={{ paddingRight: '2.5rem' }}
+                  placeholder="بحث برقم القيد أو البيان أو المرجع..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  style={{ paddingRight: '2.5rem', width: '100%' }}
                 />
               </div>
-              <select
-                className="input"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                style={{ minWidth: 170 }}
-              >
-                <option value="">كل الحالات</option>
+
+              <select className="input" style={{ width: 160 }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                <option value="">جميع الحالات</option>
                 <option value="Draft">مسودة</option>
                 <option value="Approved">معتمد</option>
-                <option value="Posted">مرحّل</option>
-                <option value="Void">ملغي</option>
+                <option value="Posted">مرحل</option>
+                <option value="Void">ملغى</option>
               </select>
             </div>
 
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table" style={{ minWidth: 980, whiteSpace: 'nowrap' }}>
-                <thead>
-                  <tr>
-                    <th>رقم القيد</th>
-                    <th>تاريخ القيد</th>
-                    <th>البيان</th>
-                    <th>المرجع</th>
-                    <th>النوع</th>
-                    <th className="numeric">المدين</th>
-                    <th className="numeric">الدائن</th>
-                    <th>الحالة</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entriesLoading ? (
+            {entriesLoading ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-on-surface-variant)' }}>
+                جاري تحميل القيود...
+              </div>
+            ) : entriesError ? (
+              <div style={{ color: 'var(--color-error)', padding: '1rem' }}>
+                {(entriesErrorObj as any)?.response?.data?.message || 'خطأ في جلب القيود اليومية'}
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="data-table">
+                  <thead>
                     <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', padding: '2rem 0' }}>جاري تحميل القيود...</td>
+                      <th>رقم القيد</th>
+                      <th>تاريخ القيد</th>
+                      <th>المرجع</th>
+                      <th>البيان الرئيسي</th>
+                      <th style={{ textAlign: 'left' }}>إجمالي المدين</th>
+                      <th style={{ textAlign: 'left' }}>إجمالي الدائن</th>
+                      <th>الحالة</th>
                     </tr>
-                  ) : entriesError ? (
-                    <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', padding: '2rem 0', color: '#b91c1c' }}>
-                        حدث خطأ أثناء جلب القيود: {(entriesErrorObj as any)?.response?.data?.message || 'يرجى تسجيل الدخول أو تحديث الصفحة.'}
-                      </td>
-                    </tr>
-                  ) : filteredEntries.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', padding: '2.5rem 0', color: 'var(--color-on-surface-variant)' }}>
-                        لا توجد قيود مطابقة للبحث.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredEntries.slice(0, 20).map((entry) => (
-                      <tr key={entry.id}>
-                        <td>{entry.entry_number}</td>
-                        <td className="numeric">{entry.entry_date.split('T')[0]}</td>
-                        <td>{entry.description || '—'}</td>
-                        <td>{entry.reference_no || '—'}</td>
-                        <td>{entry.reference_type || 'يدوي'}</td>
-                        <td className="numeric">{formatCurrency(Number(entry.total_debit))}</td>
-                        <td className="numeric">{formatCurrency(Number(entry.total_credit))}</td>
-                        <td>
-                          <span className={`chip ${entry.status === 'Posted' ? 'chip-success' : entry.status === 'Approved' ? 'chip-info' : entry.status === 'Void' ? 'chip-error' : 'chip-neutral'}`}>
-                            {entry.status === 'Posted'
-                              ? 'مرحّل'
-                              : entry.status === 'Approved'
-                              ? 'معتمد'
-                              : entry.status === 'Void'
-                              ? 'ملغي'
-                              : 'مسودة'}
-                          </span>
+                  </thead>
+                  <tbody>
+                    {filteredEntries.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>
+                          لا توجد قيود مسجلة
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    ) : (
+                      filteredEntries.map((entry) => (
+                        <tr key={entry.id}>
+                          <td>
+                            <span className="numeric" style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
+                              {entry.entry_number}
+                            </span>
+                          </td>
+                          <td className="numeric">{new Date(entry.entry_date).toLocaleDateString('ar-SA')}</td>
+                          <td className="numeric">{entry.reference_no || '—'}</td>
+                          <td>{entry.description || '—'}</td>
+                          <td className="numeric" style={{ textAlign: 'left', fontWeight: 600 }}>
+                            {formatCurrency(Number(entry.total_debit))} ر.س
+                          </td>
+                          <td className="numeric" style={{ textAlign: 'left', fontWeight: 600 }}>
+                            {formatCurrency(Number(entry.total_credit))} ر.س
+                          </td>
+                          <td>
+                            <span
+                              className={`chip ${
+                                entry.status === 'Posted' ? 'chip-success' :
+                                entry.status === 'Approved' ? 'chip-info' : 'chip-neutral'
+                              }`}
+                            >
+                              {entry.status === 'Posted' ? 'مرحل' :
+                               entry.status === 'Approved' ? 'معتمد' : 'مسودة'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="card" style={{ padding: '1.25rem' }}>
-          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, marginBottom: '1rem' }}>لوحة التحقق السريع</h2>
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
+        {/* Sidebar Status Summary */}
+        <div>
+          <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700 }}>ملخص توازن القيد</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.5rem', alignItems: 'center' }}>
               <span style={{ color: 'var(--color-on-surface-variant)' }}>إجمالي المدين</span>
-              <strong>{formatCurrency(totalDebit)}</strong>
+              <strong>{formatCurrency(totalDebit)} ر.س</strong>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.5rem', alignItems: 'center' }}>
               <span style={{ color: 'var(--color-on-surface-variant)' }}>إجمالي الدائن</span>
-              <strong>{formatCurrency(totalCredit)}</strong>
+              <strong>{formatCurrency(totalCredit)} ر.س</strong>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.5rem', alignItems: 'center' }}>
               <span style={{ color: 'var(--color-on-surface-variant)' }}>الفرق</span>
-              <strong>{formatCurrency(balanceDiff)}</strong>
+              <strong>{formatCurrency(balanceDiff)} ر.س</strong>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.5rem', alignItems: 'center' }}>
               <span style={{ color: 'var(--color-on-surface-variant)' }}>عدد الأسطر</span>
               <strong>{form.lines.length}</strong>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.5rem', alignItems: 'center' }}>
-              <span style={{ color: 'var(--color-on-surface-variant)' }}>عدد الحسابات المستخدمة</span>
-              <strong>{new Set(form.lines.map((line) => line.glAccountId).filter(Boolean)).size}</strong>
-            </div>
-            <div style={{ padding: '1rem', borderRadius: '1rem', background: isBalanced ? '#d1fae5' : '#fee2e2', color: isBalanced ? '#065f46' : '#991b1b', fontWeight: 700 }}>
+            <div
+              style={{
+                padding: '1rem',
+                borderRadius: '0.75rem',
+                background: isBalanced ? '#d1fae5' : '#fee2e2',
+                color: isBalanced ? '#065f46' : '#991b1b',
+                fontWeight: 700,
+                textAlign: 'center',
+              }}
+            >
               {isBalanced ? '✔ القيد متوازن' : `✖ القيد غير متوازن (${formatCurrency(balanceDiff)})`}
             </div>
           </div>
         </div>
       </div>
 
+      {/* CREATE JOURNAL ENTRY FORM */}
       {showNew && (
         <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 700 }}>إنشاء قيد جديد</h2>
-              <p style={{ margin: '0.5rem 0 0', color: 'var(--color-on-surface-variant)' }}>
-                املأ بيانات القيد والتفاصيل ثم احفظ للحصول على قيد مسودة.
+              <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 700 }}>إنشاء قيد محاسبي جديد</h2>
+              <p style={{ margin: '0.25rem 0 0', color: 'var(--color-on-surface-variant)', fontSize: '0.875rem' }}>
+                يمكنك تحديد الصندوق أو البنك أو العميل في أسطر القيد لاقتراح الحساب المحاسبي تلقائياً
               </p>
             </div>
             <button className="btn btn-ghost btn-sm" onClick={() => setShowNew(false)}>
@@ -375,10 +507,16 @@ export default function JournalEntries() {
             </button>
           </div>
 
+          {errorMessage && (
+            <div style={{ padding: '0.75rem 1rem', background: '#fee2e2', color: '#991b1b', borderRadius: '0.5rem', fontSize: '0.875rem' }}>
+              {errorMessage}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '1.25rem' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '1rem' }}>
-              <label className="form-field">
-                <span>تاريخ القيد</span>
+              <div>
+                <label>تاريخ القيد *</label>
                 <input
                   type="date"
                   className="input"
@@ -386,65 +524,69 @@ export default function JournalEntries() {
                   onChange={(e) => setForm({ ...form, entryDate: e.target.value })}
                   required
                 />
-              </label>
-              <label className="form-field">
-                <span>المرجع</span>
+              </div>
+              <div>
+                <label>المرجع</label>
                 <input
                   type="text"
                   className="input"
                   value={form.referenceNo}
                   onChange={(e) => setForm({ ...form, referenceNo: e.target.value })}
+                  placeholder="رقم المستند/الفاتورة"
                 />
-              </label>
-              <label className="form-field">
-                <span>نوع القيد</span>
+              </div>
+              <div>
+                <label>نوع القيد</label>
                 <select
                   className="input"
                   value={form.referenceType}
                   onChange={(e) => setForm({ ...form, referenceType: e.target.value })}
                 >
-                  <option value="Manual">يدوي</option>
-                  <option value="Automated">آلي</option>
-                  <option value="Opening">افتتاحي</option>
-                  <option value="Adjustment">تسوية</option>
-                  <option value="Closing">إقفال</option>
+                  <option value="Manual">يدوي (Manual)</option>
+                  <option value="Automated">آلي (Automated)</option>
+                  <option value="Opening">افتتاحي (Opening)</option>
+                  <option value="Adjustment">تسوية (Adjustment)</option>
+                  <option value="Closing">إقفال (Closing)</option>
                 </select>
-              </label>
-              <label className="form-field">
-                <span>سعر الصرف</span>
+              </div>
+              <div>
+                <label>سعر الصرف</label>
                 <input
                   type="number"
-                  className="input"
+                  className="input numeric"
                   value={form.exchangeRate}
                   min="0.0001"
                   step="0.0001"
                   onChange={(e) => setForm({ ...form, exchangeRate: e.target.value })}
                 />
-              </label>
+              </div>
             </div>
 
-            <label className="form-field">
-              <span>البيان الرئيسي</span>
+            <div>
+              <label>البيان الرئيسي للقيد</label>
               <textarea
                 className="input"
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
-                rows={3}
-                style={{ resize: 'vertical' }}
+                rows={2}
+                placeholder="الوصف التفصيلي للقيد اليومي..."
               />
-            </label>
+            </div>
 
+            {/* LINES TABLE */}
             <div style={{ overflowX: 'auto' }}>
-              <table className="data-table" style={{ minWidth: 1080, whiteSpace: 'nowrap' }}>
+              <table className="data-table" style={{ minWidth: 1200 }}>
                 <thead>
                   <tr>
-                    <th>السطر</th>
-                    <th>الحساب</th>
-                    <th>مركز التكلفة</th>
-                    <th>البيان</th>
-                    <th className="numeric">مدين</th>
-                    <th className="numeric">دائن</th>
-                    <th>أوامر</th>
+                    <th>#</th>
+                    <th style={{ width: '180px' }}>الصندوق / البنك (اختياري)</th>
+                    <th style={{ width: '180px' }}>العميل / المورد</th>
+                    <th style={{ width: '220px' }}>الحساب المحاسبي (GL) *</th>
+                    <th style={{ width: '160px' }}>مركز التكلفة</th>
+                    <th>البيان التفصيلي</th>
+                    <th className="numeric" style={{ width: '120px' }}>مدين</th>
+                    <th className="numeric" style={{ width: '120px' }}>دائن</th>
+                    <th style={{ width: '50px' }}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -452,13 +594,73 @@ export default function JournalEntries() {
                     <tr key={line.id}>
                       <td>{index + 1}</td>
                       <td>
+                        {/* Subledger Cash / Bank Selection */}
+                        <select
+                          className="input"
+                          value={line.cashBoxId ? `cb-${line.cashBoxId}` : line.bankAccountId ? `ba-${line.bankAccountId}` : ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val.startsWith('cb-')) {
+                              updateLine(index, 'cashBoxId', val.replace('cb-', ''));
+                            } else if (val.startsWith('ba-')) {
+                              updateLine(index, 'bankAccountId', val.replace('ba-', ''));
+                            } else {
+                              updateLine(index, 'cashBoxId', '');
+                              updateLine(index, 'bankAccountId', '');
+                            }
+                          }}
+                        >
+                          <option value="">-- اختياري --</option>
+                          <optgroup label="الصناديق المالية">
+                            {cashBoxes.map((cb) => (
+                              <option key={cb.id} value={`cb-${cb.id}`}>📦 {cb.name_ar}</option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="الحسابات البنكية">
+                            {bankAccounts.map((ba) => (
+                              <option key={ba.id} value={`ba-${ba.id}`}>🏛️ {ba.name_ar}</option>
+                            ))}
+                          </optgroup>
+                        </select>
+                      </td>
+                      <td>
+                        {/* Subledger Customer / Supplier Selection */}
+                        <select
+                          className="input"
+                          value={line.customerId ? `c-${line.customerId}` : line.supplierId ? `s-${line.supplierId}` : ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val.startsWith('c-')) {
+                              updateLine(index, 'customerId', val.replace('c-', ''));
+                            } else if (val.startsWith('s-')) {
+                              updateLine(index, 'supplierId', val.replace('s-', ''));
+                            } else {
+                              updateLine(index, 'customerId', '');
+                              updateLine(index, 'supplierId', '');
+                            }
+                          }}
+                        >
+                          <option value="">-- اختياري --</option>
+                          <optgroup label="العملاء">
+                            {customers.map((c) => (
+                              <option key={c.id} value={`c-${c.id}`}>👤 {c.name_ar}</option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="الموردون">
+                            {suppliers.map((s) => (
+                              <option key={s.id} value={`s-${s.id}`}>🚚 {s.name_ar}</option>
+                            ))}
+                          </optgroup>
+                        </select>
+                      </td>
+                      <td>
                         <select
                           className="input"
                           value={line.glAccountId}
                           onChange={(e) => updateLine(index, 'glAccountId', e.target.value)}
                           required
                         >
-                          <option value="">اختر الحساب</option>
+                          <option value="">اختر الحساب المحاسبي</option>
                           {accounts.map((account) => (
                             <option key={account.id} value={account.id}>
                               {account.code} - {account.name_ar}
@@ -486,12 +688,13 @@ export default function JournalEntries() {
                           className="input"
                           value={line.description}
                           onChange={(e) => updateLine(index, 'description', e.target.value)}
+                          placeholder="البيان..."
                         />
                       </td>
                       <td>
                         <input
                           type="number"
-                          className="input"
+                          className="input numeric"
                           min="0"
                           step="0.01"
                           value={line.debit}
@@ -501,21 +704,22 @@ export default function JournalEntries() {
                       <td>
                         <input
                           type="number"
-                          className="input"
+                          className="input numeric"
                           min="0"
                           step="0.01"
                           value={line.credit}
                           onChange={(e) => updateLine(index, 'credit', e.target.value)}
                         />
                       </td>
-                      <td>
+                      <td style={{ textAlign: 'center' }}>
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
                           onClick={() => removeLine(index)}
-                          disabled={form.lines.length === 1}
+                          disabled={form.lines.length <= 1}
+                          style={{ color: 'var(--color-error)' }}
                         >
-                          حذف
+                          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
                         </button>
                       </td>
                     </tr>
@@ -524,20 +728,19 @@ export default function JournalEntries() {
               </table>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-              <button type="button" className="btn btn-secondary" onClick={addLine}>
-                إضافة سطر
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={addLine}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+                إضافة سطر جديد
               </button>
-              <button type="submit" className="btn btn-primary" disabled={createMutation.status === 'pending'}>
-                {createMutation.status === 'pending' ? 'جاري الحفظ...' : 'حفظ القيد'}
-              </button>
-            </div>
 
-            {errorMessage && (
-              <div style={{ padding: '1rem', borderRadius: '1rem', background: '#fee2e2', color: '#991b1b' }}>
-                {errorMessage}
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button type="button" className="btn btn-ghost" onClick={() => setShowNew(false)}>إلغاء</button>
+                <button type="submit" className="btn btn-primary" disabled={!isBalanced || createMutation.isPending}>
+                  {createMutation.isPending ? 'جاري الحفظ...' : 'حفظ القيد المحاسبي'}
+                </button>
               </div>
-            )}
+            </div>
           </form>
         </div>
       )}

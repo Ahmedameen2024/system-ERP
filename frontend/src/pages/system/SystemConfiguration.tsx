@@ -149,6 +149,14 @@ export default function SystemConfiguration() {
         >
           إعدادات النظام
         </button>
+        <a
+          href="/system/cash-banks"
+          className="btn btn-ghost"
+          style={{ borderRadius: '0.5rem 0.5rem 0 0', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>account_balance</span>
+          إدارة الصناديق والبنوك
+        </a>
       </div>
 
       {activeTab === 'profile' ? (

@@ -45,6 +45,7 @@ const navItems: NavItem[] = [
   { path: '/payroll/sheet', icon: 'account_balance_wallet', label: 'كشف الرواتب' },
   { path: '/payroll/allowances', icon: 'tune', label: 'البدلات والخصومات' },
   { path: '/system', icon: 'settings', label: 'إعدادات النظام' },
+  { path: '/system/cash-banks', icon: 'account_balance', label: 'إدارة الصناديق والبنوك' },
   { path: '/system/branches', icon: 'business', label: 'إدارة الفروع' },
   { path: '/system/currencies', icon: 'currency_exchange', label: 'العملات وأسعار الصرف' },
   { path: '/system/users', icon: 'manage_accounts', label: 'المستخدمون والصلاحيات' },
