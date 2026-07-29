@@ -434,7 +434,7 @@ export default function CashBanksManagement() {
                     <td><span className="chip chip-info">{cb.currency_code || 'SAR'}</span></td>
                     <td className="numeric">{cb.gl_account_code} - {cb.gl_account_name}</td>
                     <td>{cb.responsible_employee_name || '—'}</td>
-                    <td className="numeric" style={{ textAlign: 'left', fontWeight: 700, dir: 'ltr' }}>
+                    <td dir="ltr" className="numeric" style={{ textAlign: 'left', fontWeight: 700 }}>
                       {Number(cb.current_balance || 0).toLocaleString('ar-SA')} {cb.currency_symbol || 'ر.س'}
                     </td>
                     <td>
@@ -499,7 +499,7 @@ export default function CashBanksManagement() {
                     <td>{ba.branch_name_ar || '—'}</td>
                     <td><span className="chip chip-info">{ba.currency_code || 'SAR'}</span></td>
                     <td className="numeric">{ba.gl_account_code} - {ba.gl_account_name}</td>
-                    <td className="numeric" style={{ textAlign: 'left', fontWeight: 700, dir: 'ltr' }}>
+                    <td dir="ltr" className="numeric" style={{ textAlign: 'left', fontWeight: 700 }}>
                       {Number(ba.current_balance || 0).toLocaleString('ar-SA')} {ba.currency_symbol || 'ر.س'}
                     </td>
                     <td>

@@ -437,13 +437,12 @@ export default function JournalEntries() {
                           </td>
                           <td>
                             <span
-                              className={`chip ${
-                                entry.status === 'Posted' ? 'chip-success' :
+                              className={`chip ${entry.status === 'Posted' ? 'chip-success' :
                                 entry.status === 'Approved' ? 'chip-info' : 'chip-neutral'
-                              }`}
+                                }`}
                             >
                               {entry.status === 'Posted' ? 'مرحل' :
-                               entry.status === 'Approved' ? 'معتمد' : 'مسودة'}
+                                entry.status === 'Approved' ? 'معتمد' : 'مسودة'}
                             </span>
                           </td>
                         </tr>

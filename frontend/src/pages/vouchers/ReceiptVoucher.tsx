@@ -17,7 +17,7 @@ interface ReceiptVoucherData {
   cheque_number?: string;
   cheque_date?: string;
   bank_name?: string;
-  status: 'Draft' | 'Approved' | 'Posted' | 'Reversed';
+  status: 'Draft' | 'Approved' | 'Posted' | 'Reversed' | 'Rejected';
   posting_mode?: string;
   description?: string;
 }
@@ -164,6 +164,26 @@ export default function ReceiptVoucher() {
     }
   };
 
+  const getStatusChipClass = (status?: string) => {
+    switch (status) {
+      case 'Posted': return 'chip-success';
+      case 'Approved': return 'chip-info';
+      case 'Rejected': return 'chip-error';
+      case 'Reversed': return 'chip-neutral';
+      default: return 'chip-neutral';
+    }
+  };
+
+  const getStatusLabel = (status?: string) => {
+    switch (status) {
+      case 'Posted': return 'مرحل مالياً';
+      case 'Approved': return 'معتمد';
+      case 'Rejected': return 'مرفوض';
+      case 'Reversed': return 'معكوس';
+      default: return 'مسودة';
+    }
+  };
+
   // Handle Cash Box Change
   const handleCashBoxChange = (id: string) => {
     const cb = cashBoxes.find((item) => item.id === id);
@@ -221,7 +241,7 @@ export default function ReceiptVoucher() {
     }
   };
 
-  const handleStatusAction = async (id: string, action: 'Approve' | 'Post' | 'Reverse') => {
+  const handleStatusAction = async (id: string, action: 'Approve' | 'Post' | 'Reverse' | 'Reject') => {
     try {
       const res = await api.put(`/accounting/receipt-vouchers/${id}/status`, { action });
       alert(res.data.message || 'تم تحديث حالة السند بنجاح');
@@ -288,18 +308,8 @@ export default function ReceiptVoucher() {
                     </span>
                   </td>
                   <td>
-                    <span
-                      className={`chip ${
-                        r.status === 'Posted' ? 'chip-success' :
-                        r.status === 'Approved' ? 'chip-info' :
-                        r.status === 'Rejected' ? 'chip-error' :
-                        r.status === 'Reversed' ? 'chip-neutral' : 'chip-neutral'
-                      }`}
-                    >
-                      {r.status === 'Posted' ? 'مرحل مالياً' :
-                       r.status === 'Approved' ? 'معتمد' :
-                       r.status === 'Rejected' ? 'مرفوض' :
-                       r.status === 'Reversed' ? 'معكوس' : 'مسودة'}
+                    <span className={`chip ${getStatusChipClass(r.status)}`}>
+                      {getStatusLabel(r.status)}
                     </span>
                   </td>
                   <td>
