@@ -56,7 +56,7 @@ export default function TransactionAnalysis() {
     <div className="fade-in space-y-6 text-[#191c1e] font-sans">
       {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
+        <div className="text-right">
           <h1 className="text-2xl font-bold text-[#191c1e] tracking-tight">
             تحليل المعاملات المالية (القيود اليومية)
           </h1>
@@ -194,12 +194,12 @@ export default function TransactionAnalysis() {
                     <td className="p-3 text-center">
                       <span
                         className={`px-3 py-1 rounded-full text-[11px] font-bold ${e.status === 'Posted'
-                            ? 'bg-[#d1fae5] text-[#065f46]'
-                            : e.status === 'Approved'
-                              ? 'bg-[#dbeafe] text-[#1e40af]'
-                              : e.status === 'Void'
-                                ? 'bg-[#fee2e2] text-[#991b1b]'
-                                : 'bg-[#eceef0] text-[#3d4949]'
+                          ? 'bg-[#d1fae5] text-[#065f46]'
+                          : e.status === 'Approved'
+                            ? 'bg-[#dbeafe] text-[#1e40af]'
+                            : e.status === 'Void'
+                              ? 'bg-[#fee2e2] text-[#991b1b]'
+                              : 'bg-[#eceef0] text-[#3d4949]'
                           }`}
                       >
                         {e.status === 'Posted'

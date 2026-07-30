@@ -9,8 +9,8 @@ const Layout = React.lazy(() => import('./components/Layout'));
 const AccountingCycleDashboard = React.lazy(() => import('./pages/accounting/AccountingCycleDashboard'));
 const ChartOfAccounts = React.lazy(() => import('./pages/accounting/ChartOfAccounts'));
 const CostCenters = React.lazy(() => import('./pages/accounting/CostCenters'));
-const TransactionAnalysis = React.lazy(() => import('./pages/accounting/TransactionAnalysis'));
 const TrialBalance = React.lazy(() => import('./pages/accounting/TrialBalance'));
+
 const AccountDetails = React.lazy(() => import('./pages/accounting/AccountDetails'));
 const FinancialStatements = React.lazy(() => import('./pages/accounting/FinancialStatements'));
 const JournalEntries = React.lazy(() => import('./pages/accounting/JournalEntries'));
@@ -85,6 +85,8 @@ export default function App() {
 
             {/* Protected routes */}
             <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+
+
               {/* Default redirect */}
               <Route index element={<Navigate to="/accounting" replace />} />
 
@@ -93,6 +95,7 @@ export default function App() {
               <Route path="accounting/chart-of-accounts" element={<ChartOfAccounts />} />
               <Route path="accounting/cost-centers" element={<CostCenters />} />
               <Route path="accounting/journal-entries" element={<JournalEntries />} />
+
               <Route path="accounting/transaction-analysis" element={<Navigate to="/accounting/journal-entries" replace />} />
               <Route path="accounting/trial-balance" element={<TrialBalance />} />
               <Route path="accounting/account-details" element={<AccountDetails />} />

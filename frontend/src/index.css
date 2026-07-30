@@ -1,6 +1,7 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+
+
 /* Enable forms plugin via tailwind.config.js plugins: [require('@tailwindcss/forms')] */
 
 /* ── Equilibrium Finance Design System ─────────────────────── */

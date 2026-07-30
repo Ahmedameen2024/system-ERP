@@ -4,14 +4,16 @@ import GeneralJournalEntryModal from '../../components/accounting/GeneralJournal
 
 export default function JournalEntries() {
   const navigate = useNavigate();
-  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [selectedEntryId] = useState<string | null>(null);
 
   return (
     <GeneralJournalEntryModal
       isOpen={true}
+      fullPage={true}
       onClose={() => navigate('/accounting')}
       entryId={selectedEntryId}
       onSuccess={() => {}}
     />
   );
 }
+
