@@ -676,7 +676,15 @@ export default function GeneralJournalEntryModal({
           <div className="flex flex-col">
             <div className="flex items-center gap-3">
               <h1 className="font-headline-md text-on-surface text-xl font-bold">القيود اليومية العامة</h1>
-              <span className="px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container text-label-md font-bold text-xs">
+              <span className={`px-3 py-1 rounded-full text-label-md font-bold text-xs border ${
+                status === 'Posted'
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                  : status === 'Approved'
+                  ? 'bg-blue-100 text-blue-800 border-blue-300'
+                  : status === 'Void'
+                  ? 'bg-red-100 text-red-800 border-red-300'
+                  : 'bg-amber-100 text-amber-800 border-amber-300'
+              }`}>
                 {status === 'Posted' ? 'مرحّل' : status === 'Approved' ? 'معتمد' : status === 'Void' ? 'ملغي' : 'مسودة'}
               </span>
             </div>
