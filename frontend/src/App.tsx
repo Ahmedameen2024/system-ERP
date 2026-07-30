@@ -92,8 +92,8 @@ export default function App() {
               <Route path="accounting" element={<AccountingCycleDashboard />} />
               <Route path="accounting/chart-of-accounts" element={<ChartOfAccounts />} />
               <Route path="accounting/cost-centers" element={<CostCenters />} />
-              <Route path="accounting/transaction-analysis" element={<TransactionAnalysis />} />
-              <Route path="accounting/journal-entries" element={<Navigate to="/accounting/transaction-analysis" replace />} />
+              <Route path="accounting/journal-entries" element={<JournalEntries />} />
+              <Route path="accounting/transaction-analysis" element={<Navigate to="/accounting/journal-entries" replace />} />
               <Route path="accounting/trial-balance" element={<TrialBalance />} />
               <Route path="accounting/account-details" element={<AccountDetails />} />
               <Route path="accounting/financial-statements" element={<FinancialStatements />} />

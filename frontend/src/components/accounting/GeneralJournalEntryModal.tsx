@@ -122,10 +122,15 @@ export default function GeneralJournalEntryModal({
   const [activeAccountLineIndex, setActiveAccountLineIndex] = useState<number | null>(null);
   const [showAuditLogs, setShowAuditLogs] = useState<boolean>(false);
   const [showAttachments, setShowAttachments] = useState<boolean>(false);
+  const [showJournalList, setShowJournalList] = useState<boolean>(false);
   const [searchAccountQuery, setSearchAccountQuery] = useState<string>('');
+  const [searchJournalListQuery, setSearchJournalListQuery] = useState<string>('');
+  const [journalListStatusFilter, setJournalListStatusFilter] = useState<string>('');
+  const [activeEntryId, setActiveEntryId] = useState<string | null>(entryId || null);
 
-  // Party search state (per-line search query for autocomplete)
-  const [partySearchQueries, setPartySearchQueries] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setActiveEntryId(entryId || null);
+  }, [entryId]);
 
   // Alerts
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -254,14 +259,69 @@ export default function GeneralJournalEntryModal({
 
   // Load existing entry details
   const { data: entryDetail } = useQuery({
-    queryKey: ['journal-entry-detail', entryId],
+    queryKey: ['journal-entry-detail', activeEntryId],
     queryFn: async () => {
-      if (!entryId) return null;
-      const res = await api.get(`/accounting/journal-entries/${entryId}`);
+      if (!activeEntryId) return null;
+      const res = await api.get(`/accounting/journal-entries/${activeEntryId}`);
       return res.data.data;
     },
-    enabled: isOpen && !!entryId,
+    enabled: isOpen && !!activeEntryId,
   });
+
+  // Fetch all journal entries for history list modal
+  const { data: allJournalEntries = [] } = useQuery({
+    queryKey: ['journal-entries-list'],
+    queryFn: async () => {
+      const res = await api.get('/accounting/journal-entries');
+      return (res.data.data || []) as any[];
+    },
+    enabled: isOpen,
+  });
+
+  const handleNewEntry = () => {
+    setActiveEntryId(null);
+    setEntryNumber(`JV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`);
+    setEntryDate(new Date().toISOString().slice(0, 10));
+    setReferenceNo('');
+    setMainDescription('');
+    setStatus('Draft');
+    setLines([
+      {
+        id: 'line-1',
+        glAccountId: '',
+        accountCode: '',
+        accountName: '',
+        costCenterId: '',
+        projectId: '',
+        description: '',
+        debitForeign: '',
+        creditForeign: '',
+        debitLocal: '0.00',
+        creditLocal: '0.00',
+        partyType: 'none',
+        partyId: '',
+        partyName: '',
+        referenceNumber: '',
+      },
+      {
+        id: 'line-2',
+        glAccountId: '',
+        accountCode: '',
+        accountName: '',
+        costCenterId: '',
+        projectId: '',
+        description: '',
+        debitForeign: '',
+        creditForeign: '',
+        debitLocal: '0.00',
+        creditLocal: '0.00',
+        partyType: 'none',
+        partyId: '',
+        partyName: '',
+        referenceNumber: '',
+      },
+    ]);
+  };
 
   useEffect(() => {
     if (entryDetail && entryId) {
@@ -624,19 +684,36 @@ export default function GeneralJournalEntryModal({
           </div>
         </div>
 
-        <div className="flex items-center gap-6">
-          {/* Action Buttons */}
+        <div className="flex items-center gap-4">
+          {/* Main Action Buttons */}
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleNewEntry}
+              className="px-4 py-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all"
+            >
+              <span className="material-symbols-outlined text-[18px]">add</span>
+              قيد جديد
+            </button>
+            <button
+              onClick={() => setShowJournalList(true)}
+              className="px-4 py-2 bg-surface-container-high hover:bg-surface-container-highest text-on-surface rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all"
+            >
+              <span className="material-symbols-outlined text-[18px]">list_alt</span>
+              سجل القيود ({allJournalEntries.length})
+            </button>
+
+            <div className="w-[1px] h-6 bg-outline-variant mx-1"></div>
+
             <button
               disabled={saveMutation.isPending || statusActionMutation.isPending || status === 'Posted'}
               onClick={() => {
-                if (entryId && status !== 'Posted') {
+                if (activeEntryId && status !== 'Posted') {
                   statusActionMutation.mutate('Post');
                 } else {
                   saveMutation.mutate('Posted');
                 }
               }}
-              className="px-6 py-2 bg-primary text-on-primary rounded-lg font-bold text-label-md hover:brightness-110 transition-all flex items-center gap-2 shadow-sm disabled:opacity-50"
+              className="px-5 py-2 bg-primary text-on-primary rounded-lg font-bold text-label-md hover:brightness-110 transition-all flex items-center gap-2 shadow-sm disabled:opacity-50"
             >
               <span className="material-symbols-outlined text-[18px]">publish</span>
               ترحيل
@@ -644,20 +721,20 @@ export default function GeneralJournalEntryModal({
             <button
               disabled={saveMutation.isPending || statusActionMutation.isPending || status === 'Posted' || status === 'Approved'}
               onClick={() => {
-                if (entryId) {
+                if (activeEntryId) {
                   statusActionMutation.mutate('Approve');
                 } else {
                   saveMutation.mutate('Approved');
                 }
               }}
-              className="px-6 py-2 border border-primary text-primary rounded-lg font-bold text-label-md hover:bg-primary/5 transition-all disabled:opacity-50"
+              className="px-5 py-2 border border-primary text-primary rounded-lg font-bold text-label-md hover:bg-primary/5 transition-all disabled:opacity-50"
             >
               اعتماد
             </button>
             <button
               disabled={saveMutation.isPending || statusActionMutation.isPending}
               onClick={() => saveMutation.mutate('Draft')}
-              className="px-6 py-2 text-on-surface-variant hover:bg-surface-container rounded-lg font-bold text-label-md transition-all"
+              className="px-5 py-2 text-on-surface-variant hover:bg-surface-container rounded-lg font-bold text-label-md transition-all"
             >
               مراجعة
             </button>
@@ -1382,6 +1459,132 @@ export default function GeneralJournalEntryModal({
                 <p className="text-xs font-semibold text-on-surface">اضغط هنا أو اسحب الملفات للإرفاق</p>
                 <p className="text-[10px] text-outline mt-1">PDF, PNG, JPG (حتى 10MB)</p>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Journal Entries List Modal */}
+      {showJournalList && (
+        <div className="modal-overlay">
+          <div className="modal-box max-w-4xl bg-white rounded-xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-outline-variant">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-primary text-2xl">list_alt</span>
+                <h3 className="font-bold text-lg text-on-surface">سجل القيود اليومية</h3>
+                <span className="bg-primary/10 text-primary px-3 py-0.5 rounded-full text-xs font-bold font-mono">
+                  {allJournalEntries.length} قيد
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    handleNewEntry();
+                    setShowJournalList(false);
+                  }}
+                  className="px-4 py-1.5 bg-primary text-white rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-primary/90"
+                >
+                  <span className="material-symbols-outlined text-sm">add</span>
+                  قيد جديد
+                </button>
+                <button onClick={() => setShowJournalList(false)} className="text-outline hover:text-on-surface font-bold text-xl">×</button>
+              </div>
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#f2f4f6] p-3 rounded-lg">
+              <input
+                type="text"
+                placeholder="بحث برقم القيد أو البيان أو المرجع..."
+                value={searchJournalListQuery}
+                onChange={(e) => setSearchJournalListQuery(e.target.value)}
+                className="flex-1 bg-white border border-outline-variant/40 rounded-lg px-4 py-2 text-xs outline-none focus:ring-2 focus:ring-primary"
+              />
+              <select
+                value={journalListStatusFilter}
+                onChange={(e) => setJournalListStatusFilter(e.target.value)}
+                className="bg-white border border-outline-variant/40 rounded-lg px-3 py-2 text-xs outline-none"
+              >
+                <option value="">جميع الحالات</option>
+                <option value="Posted">مرحّل</option>
+                <option value="Approved">معتمد</option>
+                <option value="Draft">مسودة</option>
+                <option value="Void">ملغي</option>
+              </select>
+            </div>
+
+            {/* Table */}
+            <div className="max-h-96 overflow-y-auto border border-outline-variant/30 rounded-lg">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-surface-container-low text-on-surface-variant border-b font-semibold">
+                  <tr>
+                    <th className="p-3">رقم القيد</th>
+                    <th className="p-3">التاريخ</th>
+                    <th className="p-3">البيان</th>
+                    <th className="p-3">النوع</th>
+                    <th className="p-3">إجمالي القيد</th>
+                    <th className="p-3 text-center">الحالة</th>
+                    <th className="p-3 text-center">اختيار</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant/20">
+                  {allJournalEntries
+                    .filter((e: any) => {
+                      const matchQ = !searchJournalListQuery ||
+                        e.entry_number?.includes(searchJournalListQuery) ||
+                        e.description?.includes(searchJournalListQuery) ||
+                        e.reference_no?.includes(searchJournalListQuery);
+                      const matchS = !journalListStatusFilter || e.status === journalListStatusFilter;
+                      return matchQ && matchS;
+                    })
+                    .map((entry: any) => (
+                      <tr
+                        key={entry.id}
+                        className={`hover:bg-primary/5 transition-colors cursor-pointer ${
+                          activeEntryId === entry.id ? 'bg-primary/10 font-semibold' : ''
+                        }`}
+                        onClick={() => {
+                          setActiveEntryId(entry.id);
+                          setShowJournalList(false);
+                        }}
+                      >
+                        <td className="p-3 font-mono font-bold text-primary">{entry.entry_number}</td>
+                        <td className="p-3 font-mono">{entry.entry_date?.split('T')[0]}</td>
+                        <td className="p-3 max-w-xs truncate">{entry.description || '—'}</td>
+                        <td className="p-3 text-outline">{entry.reference_type || 'GeneralJournal'}</td>
+                        <td className="p-3 font-mono font-bold">
+                          {parseFloat(entry.total_debit || '0').toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="p-3 text-center">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                              entry.status === 'Posted'
+                                ? 'bg-green-100 text-green-800'
+                                : entry.status === 'Approved'
+                                ? 'bg-blue-100 text-blue-800'
+                                : entry.status === 'Void'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}
+                          >
+                            {entry.status === 'Posted' ? 'مرحّل' : entry.status === 'Approved' ? 'معتمد' : entry.status === 'Void' ? 'ملغي' : 'مسودة'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            onClick={(evt) => {
+                              evt.stopPropagation();
+                              setActiveEntryId(entry.id);
+                              setShowJournalList(false);
+                            }}
+                            className="px-3 py-1 bg-primary text-white rounded text-[11px] font-bold hover:brightness-110"
+                          >
+                            فتح
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

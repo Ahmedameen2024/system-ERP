@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore';
 const pageTitles: Record<string, string> = {
   '/accounting': 'الدورة المحاسبية',
   '/accounting/chart-of-accounts': 'دليل الحسابات',
-  '/accounting/transaction-analysis': 'تحليل المعاملات',
+  '/accounting/journal-entries': 'القيود اليومية العامة',
   '/accounting/trial-balance': 'ميزان المراجعة',
   '/accounting/account-details': 'كشف الحساب',
   '/accounting/financial-statements': 'القوائم المالية',

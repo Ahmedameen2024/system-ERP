@@ -138,7 +138,7 @@ export default function AccountingCycleDashboard() {
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--color-primary)', verticalAlign: 'middle', marginLeft: '0.375rem' }}>receipt</span>
               آخر القيود المحاسبية
             </h3>
-            <a href="/accounting/transaction-analysis" style={{ fontSize: '0.75rem', color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>عرض الكل</a>
+            <a href="/accounting/journal-entries" style={{ fontSize: '0.75rem', color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>عرض الكل</a>
           </div>
           {[
             { no: 'JE-000234', date: '١٤/٠٧/٢٠٢٥', desc: 'فاتورة مبيعات #INV-0089', amount: '٤٥٬٦٠٠', status: 'Posted' },
