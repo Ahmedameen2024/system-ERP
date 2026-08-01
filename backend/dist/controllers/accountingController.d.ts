@@ -1,0 +1,20 @@
+import { Request, Response } from 'express';
+export declare const getAccounts: (req: Request, res: Response) => Promise<void>;
+export declare const createAccount: (req: Request, res: Response) => Promise<void>;
+export declare const updateAccount: (req: Request, res: Response) => Promise<void>;
+export declare const getCostCenters: (req: Request, res: Response) => Promise<void>;
+export declare const createCostCenter: (req: Request, res: Response) => Promise<void>;
+export declare const updateCostCenter: (req: Request, res: Response) => Promise<void>;
+export declare const getJournalEntries: (req: Request, res: Response) => Promise<void>;
+export declare const getJournalEntryById: (req: Request, res: Response) => Promise<void>;
+export declare const createJournalEntry: (req: Request, res: Response) => Promise<void>;
+export declare const updateJournalEntry: (req: Request, res: Response) => Promise<void>;
+export declare const updateJournalEntryStatus: (req: Request, res: Response) => Promise<void>;
+export declare const deleteJournalEntry: (req: Request, res: Response) => Promise<void>;
+export declare const getReceiptVouchers: (req: Request, res: Response) => Promise<void>;
+export declare const createReceiptVoucher: (req: Request, res: Response) => Promise<void>;
+export declare const updateReceiptVoucherStatus: (req: Request, res: Response) => Promise<void>;
+export declare const getPaymentVouchers: (req: Request, res: Response) => Promise<void>;
+export declare const createPaymentVoucher: (req: Request, res: Response) => Promise<void>;
+export declare const updatePaymentVoucherStatus: (req: Request, res: Response) => Promise<void>;
+//# sourceMappingURL=accountingController.d.ts.map
