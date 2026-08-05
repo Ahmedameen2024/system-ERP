@@ -28,13 +28,11 @@ export default function StockLevels() {
       const res = await api.get(`/inventory/balances${params}`);
       return res.data.data as Balance[];
     },
-    initialData: [],
   });
 
   const { data: warehouses = [] } = useQuery({
     queryKey: ['warehouses'],
     queryFn: async () => { const r = await api.get('/inventory/warehouses'); return r.data.data as Warehouse[]; },
-    initialData: [],
   });
 
   const filtered = balances.filter(b =>

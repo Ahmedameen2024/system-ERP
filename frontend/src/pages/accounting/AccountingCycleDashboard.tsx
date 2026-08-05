@@ -59,7 +59,6 @@ export default function AccountingCycleDashboard() {
       return res.data.data as TrialBalanceRow[];
     },
     enabled: false, // will enable when accounting routes are added
-    initialData: [],
   });
 
   const currentYear = new Date().getFullYear();

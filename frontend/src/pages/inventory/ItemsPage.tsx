@@ -48,25 +48,21 @@ export default function ItemsPage() {
       const res = await api.get('/inventory/items');
       return res.data.data as Item[];
     },
-    initialData: [],
   });
 
   const { data: uoms = [] } = useQuery({
     queryKey: ['uoms'],
     queryFn: async () => { const r = await api.get('/inventory/uoms'); return r.data.data as UOM[]; },
-    initialData: [],
   });
 
   const { data: categories = [] } = useQuery({
     queryKey: ['item-categories'],
     queryFn: async () => { const r = await api.get('/inventory/categories'); return r.data.data as Category[]; },
-    initialData: [],
   });
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['gl-accounts'],
     queryFn: async () => { const r = await api.get('/accounting/accounts'); return r.data.data as GLAccount[]; },
-    initialData: [],
   });
 
   const mutation = useMutation({

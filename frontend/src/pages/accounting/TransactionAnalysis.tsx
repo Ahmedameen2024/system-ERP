@@ -26,7 +26,6 @@ export default function TransactionAnalysis() {
       const res = await api.get('/accounting/journal-entries');
       return res.data.data as JournalEntry[];
     },
-    initialData: [],
   });
 
   const filtered = entries.filter((e) => {

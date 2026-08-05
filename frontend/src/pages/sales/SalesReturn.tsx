@@ -54,13 +54,11 @@ export default function SalesReturn() {
   const { data: returns = [], isLoading } = useQuery({
     queryKey: ['sales-returns'],
     queryFn: async () => { const r = await api.get('/sales/returns'); return r.data.data as SalesReturn[]; },
-    initialData: [],
   });
 
   const { data: invoices = [] } = useQuery({
     queryKey: ['sales-invoices'],
     queryFn: async () => { const r = await api.get('/sales/invoices'); return r.data.data as Invoice[]; },
-    initialData: [],
   });
 
   const postedInvoices = invoices.filter(inv => ['Posted', 'Paid', 'PartiallyPaid'].includes((inv as any).status));

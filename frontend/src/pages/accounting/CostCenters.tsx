@@ -35,7 +35,6 @@ export default function CostCenters() {
       const res = await api.get('/accounting/cost-centers');
       return res.data.data as CostCenter[];
     },
-    initialData: [],
   });
 
   const mutation = useMutation({

@@ -45,7 +45,6 @@ export default function WarehousesPage() {
       const res = await api.get('/inventory/warehouses');
       return res.data.data as Warehouse[];
     },
-    initialData: [],
   });
 
   const { data: users = [] } = useQuery({
@@ -54,7 +53,6 @@ export default function WarehousesPage() {
       const res = await api.get('/setup/users');
       return res.data.data as User[];
     },
-    initialData: [],
   });
 
   const { data: branches = [] } = useQuery({
@@ -63,7 +61,6 @@ export default function WarehousesPage() {
       const res = await api.get('/setup/branches');
       return res.data.data as Branch[];
     },
-    initialData: [],
   });
 
   const mutation = useMutation({

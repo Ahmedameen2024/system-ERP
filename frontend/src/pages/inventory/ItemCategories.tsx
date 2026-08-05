@@ -33,7 +33,6 @@ export default function ItemCategories() {
       const res = await api.get('/inventory/categories');
       return res.data.data as Category[];
     },
-    initialData: [],
   });
 
   const mutation = useMutation({

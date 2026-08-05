@@ -56,25 +56,21 @@ export default function InventoryTransactions() {
       const res = await api.get('/inventory/transactions');
       return res.data.data as InventoryTransaction[];
     },
-    initialData: [],
   });
 
   const { data: items = [] } = useQuery({
     queryKey: ['items'],
     queryFn: async () => { const r = await api.get('/inventory/items'); return r.data.data as Item[]; },
-    initialData: [],
   });
 
   const { data: warehouses = [] } = useQuery({
     queryKey: ['warehouses'],
     queryFn: async () => { const r = await api.get('/inventory/warehouses'); return r.data.data as Warehouse[]; },
-    initialData: [],
   });
 
   const { data: uoms = [] } = useQuery({
     queryKey: ['uoms'],
     queryFn: async () => { const r = await api.get('/inventory/uoms'); return r.data.data as UOM[]; },
-    initialData: [],
   });
 
   const mutation = useMutation({

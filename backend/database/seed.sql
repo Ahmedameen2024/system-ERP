@@ -167,3 +167,42 @@ VALUES
 ('00000000-0000-0000-0000-000000000010', 'EXEMPT', 'معفى من الضريبة', 'Tax Exempt', 0.00, 'Exempt', 'Active'),
 ('00000000-0000-0000-0000-000000000010', 'ZERO', 'صفر بالمائة', 'Zero Rated', 0.00, 'ZeroRated', 'Active')
 ON CONFLICT (company_id, code) DO NOTHING;
+
+-- Default Chart of Accounts (Level 1 & Level 2)
+-- Level 1 Accounts (Parent Accounts - Not Postable)
+INSERT INTO gl_accounts (id, company_id, code, name_ar, name_en, parent_id, account_level, account_type, nature, allow_posting, status)
+VALUES
+('00000000-0000-0000-0001-000000000001', '00000000-0000-0000-0000-000000000010', '1', 'الأصول',      'Assets',      NULL, 1, 'Asset',     'Debit',  FALSE, 'Active'),
+('00000000-0000-0000-0001-000000000002', '00000000-0000-0000-0000-000000000010', '2', 'الالتزامات',  'Liabilities', NULL, 1, 'Liability', 'Credit', FALSE, 'Active'),
+('00000000-0000-0000-0001-000000000003', '00000000-0000-0000-0000-000000000010', '3', 'حقوق الملكية','Equity',      NULL, 1, 'Equity',    'Credit', FALSE, 'Active'),
+('00000000-0000-0000-0001-000000000004', '00000000-0000-0000-0000-000000000010', '4', 'الإيرادات',   'Revenue',     NULL, 1, 'Revenue',   'Credit', FALSE, 'Active'),
+('00000000-0000-0000-0001-000000000005', '00000000-0000-0000-0000-000000000010', '5', 'المصروفات',  'Expenses',    NULL, 1, 'Expense',   'Debit',  FALSE, 'Active')
+ON CONFLICT (company_id, code) DO NOTHING;
+
+-- Level 2 Accounts (Sub-accounts - Not Postable)
+INSERT INTO gl_accounts (id, company_id, code, name_ar, name_en, parent_id, account_level, account_type, nature, allow_posting, status)
+VALUES
+-- Level 2 under Assets (Parent Code: 1)
+('00000000-0000-0000-0002-000000000011', '00000000-0000-0000-0000-000000000010', '11', 'الأصول المتداولة',    'Current Assets',    (SELECT id FROM gl_accounts WHERE company_id = '00000000-0000-0000-0000-000000000010' AND code = '1'), 2, 'Asset',     'Debit',  FALSE, 'Active'),
+('00000000-0000-0000-0002-000000000012', '00000000-0000-0000-0000-000000000010', '12', 'الأصول غير المتداولة','Non-Current Assets',(SELECT id FROM gl_accounts WHERE company_id = '00000000-0000-0000-0000-000000000010' AND code = '1'), 2, 'Asset',     'Debit',  FALSE, 'Active'),
+
+-- Level 2 under Liabilities (Parent Code: 2)
+('00000000-0000-0000-0002-000000000021', '00000000-0000-0000-0000-000000000010', '21', 'الالتزامات المتداولة',   'Current Liabilities',   (SELECT id FROM gl_accounts WHERE company_id = '00000000-0000-0000-0000-000000000010' AND code = '2'), 2, 'Liability', 'Credit', FALSE, 'Active'),
+('00000000-0000-0000-0002-000000000022', '00000000-0000-0000-0000-000000000010', '22', 'الالتزامات غير المتداولة','Non-Current Liabilities',(SELECT id FROM gl_accounts WHERE company_id = '00000000-0000-0000-0000-000000000010' AND code = '2'), 2, 'Liability', 'Credit', FALSE, 'Active'),
+
+-- Level 2 under Equity (Parent Code: 3)
+('00000000-0000-0000-0002-000000000031', '00000000-0000-0000-0000-000000000010', '31', 'رأس المال',       'Capital',          (SELECT id FROM gl_accounts WHERE company_id = '00000000-0000-0000-0000-000000000010' AND code = '3'), 2, 'Equity',    'Credit', FALSE, 'Active'),
+('00000000-0000-0000-0002-000000000032', '00000000-0000-0000-0000-000000000010', '32', 'الأرباح المحتجزة','Retained Earnings', (SELECT id FROM gl_accounts WHERE company_id = '00000000-0000-0000-0000-000000000010' AND code = '3'), 2, 'Equity',    'Credit', FALSE, 'Active'),
+
+-- Level 2 under Revenue (Parent Code: 4)
+('00000000-0000-0000-0002-000000000041', '00000000-0000-0000-0000-000000000010', '41', 'إيرادات التشغيل','Operating Revenue',(SELECT id FROM gl_accounts WHERE company_id = '00000000-0000-0000-0000-000000000010' AND code = '4'), 2, 'Revenue',   'Credit', FALSE, 'Active'),
+('00000000-0000-0000-0002-000000000042', '00000000-0000-0000-0000-000000000010', '42', 'الإيرادات الأخرى','Other Revenue',   (SELECT id FROM gl_accounts WHERE company_id = '00000000-0000-0000-0000-000000000010' AND code = '4'), 2, 'Revenue',   'Credit', FALSE, 'Active'),
+
+-- Level 2 under Expenses (Parent Code: 5)
+('00000000-0000-0000-0002-000000000051', '00000000-0000-0000-0000-000000000010', '51', 'مصروفات التشغيل',         'Operating Expenses',          (SELECT id FROM gl_accounts WHERE company_id = '00000000-0000-0000-0000-000000000010' AND code = '5'), 2, 'Expense',   'Debit',  FALSE, 'Active'),
+('00000000-0000-0000-0002-000000000052', '00000000-0000-0000-0000-000000000010', '52', 'المصروفات الإدارية',       'Administrative Expenses',     (SELECT id FROM gl_accounts WHERE company_id = '00000000-0000-0000-0000-000000000010' AND code = '5'), 2, 'Expense',   'Debit',  FALSE, 'Active'),
+('00000000-0000-0000-0002-000000000053', '00000000-0000-0000-0000-000000000010', '53', 'المصروفات البيعية والتسويقية','Selling & Marketing Expenses',(SELECT id FROM gl_accounts WHERE company_id = '00000000-0000-0000-0000-000000000010' AND code = '5'), 2, 'Expense',   'Debit',  FALSE, 'Active'),
+('00000000-0000-0000-0002-000000000054', '00000000-0000-0000-0000-000000000010', '54', 'المصروفات المالية',       'Financial Expenses',          (SELECT id FROM gl_accounts WHERE company_id = '00000000-0000-0000-0000-000000000010' AND code = '5'), 2, 'Expense',   'Debit',  FALSE, 'Active'),
+('00000000-0000-0000-0002-000000000055', '00000000-0000-0000-0000-000000000010', '55', 'المصروفات الأخرى',        'Other Expenses',              (SELECT id FROM gl_accounts WHERE company_id = '00000000-0000-0000-0000-000000000010' AND code = '5'), 2, 'Expense',   'Debit',  FALSE, 'Active')
+ON CONFLICT (company_id, code) DO NOTHING;
+

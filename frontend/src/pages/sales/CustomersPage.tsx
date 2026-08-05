@@ -40,16 +40,20 @@ export default function CustomersPage() {
   const [activeTab, setActiveTab] = useState<'basic' | 'financial'>('basic');
   const [form, setForm] = useState(EMPTY_FORM);
 
-  const { data: customers = [], isLoading } = useQuery({
+  const { data: customers = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['customers'],
-    queryFn: async () => { const r = await api.get('/sales/customers'); return r.data.data as Customer[]; },
-    initialData: [],
+    queryFn: async () => {
+      const r = await api.get('/sales/customers');
+      return (r.data.data || []) as Customer[];
+    },
   });
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['gl-accounts'],
-    queryFn: async () => { const r = await api.get('/accounting/accounts'); return r.data.data as GLAccount[]; },
-    initialData: [],
+    queryFn: async () => {
+      const r = await api.get('/accounting/accounts');
+      return (r.data.data || []) as GLAccount[];
+    },
   });
 
   const mutation = useMutation({

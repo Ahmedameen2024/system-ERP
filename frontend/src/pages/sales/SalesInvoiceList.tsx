@@ -34,7 +34,6 @@ export default function SalesInvoiceList() {
   const { data: invoices = [], isLoading } = useQuery({
     queryKey: ['sales-invoices'],
     queryFn: async () => { const r = await api.get('/sales/invoices'); return r.data.data as Invoice[]; },
-    initialData: [],
   });
 
   const filtered = invoices.filter(inv => {

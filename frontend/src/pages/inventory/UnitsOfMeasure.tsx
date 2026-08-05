@@ -35,7 +35,6 @@ export default function UnitsOfMeasure() {
       const res = await api.get('/inventory/uoms');
       return res.data.data as UOM[];
     },
-    initialData: [],
   });
 
   const mutation = useMutation({

@@ -52,7 +52,6 @@ export default function SalesDashboard() {
   const { data: invoices = [], isLoading: invLoading } = useQuery({
     queryKey: ['sales-invoices'],
     queryFn: async () => { const r = await api.get('/sales/invoices'); return r.data.data as Invoice[]; },
-    initialData: [],
   });
 
   const recentInvoices = invoices.slice(0, 6);

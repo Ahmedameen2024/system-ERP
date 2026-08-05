@@ -402,7 +402,7 @@ export const createDepartment = async (req: Request, res: Response): Promise<voi
 export const getSuppliers = async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await query(
-      `SELECT s.*, cu.code AS currency_code FROM suppliers s
+      `SELECT s.*, cu.code AS currency_code, cu.name_ar AS currency_name FROM suppliers s
        LEFT JOIN currencies cu ON s.currency_id = cu.id
        WHERE s.company_id = $1 ORDER BY s.code`,
       [req.user!.companyId]
@@ -410,6 +410,105 @@ export const getSuppliers = async (req: Request, res: Response): Promise<void> =
     successResponse(res, result.rows);
   } catch (error) {
     errorResponse(res, 'خطأ في جلب الموردين', 500);
+  }
+};
+
+export const createSupplier = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      code, nameAr, nameEn, contactPerson, phone, email, city, address,
+      taxNumber, crNumber, creditLimit, openingBalance, currencyId,
+      apAccountId, paymentTerms, status
+    } = req.body;
+
+    if (!currencyId) {
+      errorResponse(res, 'العملة مطلوبة', 400);
+      return;
+    }
+    if (!nameAr) {
+      errorResponse(res, 'الاسم العربي مطلوب', 400);
+      return;
+    }
+
+    // Auto-generate code if not provided
+    let supplierCode = code;
+    if (!supplierCode) {
+      const countResult = await query(
+        `SELECT COUNT(*) FROM suppliers WHERE company_id = $1`,
+        [req.user!.companyId]
+      );
+      const count = parseInt(countResult.rows[0].count) + 1;
+      supplierCode = 'SUP-' + String(count).padStart(4, '0');
+    }
+
+    const creditLimitValue = (creditLimit !== undefined && creditLimit !== null && creditLimit !== '') 
+      ? parseFloat(creditLimit) 
+      : null;
+
+    const openingBal = openingBalance ? parseFloat(openingBalance) : 0;
+
+    const result = await query(
+      `INSERT INTO suppliers 
+        (company_id, code, name_ar, name_en, contact_person, phone, email, city, address,
+         tax_number, cr_number, credit_limit, opening_balance, balance, currency_id,
+         ap_account_id, payment_terms, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+       RETURNING *`,
+      [
+        req.user!.companyId, supplierCode, nameAr, nameEn || null, contactPerson || null,
+        phone || null, email || null, city || null, address || null,
+        taxNumber || null, crNumber || null, creditLimitValue, openingBal, openingBal,
+        currencyId, apAccountId || null, paymentTerms || 30, status || 'Active'
+      ]
+    );
+    successResponse(res, result.rows[0], 'تم إضافة المورد بنجاح', 201);
+  } catch (error: any) {
+    if (error.code === '23505') {
+      errorResponse(res, 'كود المورد موجود مسبقاً', 409);
+    } else {
+      errorResponse(res, 'خطأ في إضافة المورد', 500);
+    }
+  }
+};
+
+export const updateSupplier = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const {
+      nameAr, nameEn, contactPerson, phone, email, city, address,
+      taxNumber, crNumber, creditLimit, currencyId,
+      apAccountId, paymentTerms, status
+    } = req.body;
+
+    if (!currencyId) {
+      errorResponse(res, 'العملة مطلوبة', 400);
+      return;
+    }
+
+    const creditLimitValue = (creditLimit !== undefined && creditLimit !== null && creditLimit !== '')
+      ? parseFloat(creditLimit)
+      : null;
+
+    const result = await query(
+      `UPDATE suppliers SET
+        name_ar=$1, name_en=$2, contact_person=$3, phone=$4, email=$5,
+        city=$6, address=$7, tax_number=$8, cr_number=$9, credit_limit=$10,
+        currency_id=$11, ap_account_id=$12, payment_terms=$13, status=$14
+       WHERE id=$15 AND company_id=$16 RETURNING *`,
+      [
+        nameAr, nameEn || null, contactPerson || null, phone || null, email || null,
+        city || null, address || null, taxNumber || null, crNumber || null, creditLimitValue,
+        currencyId, apAccountId || null, paymentTerms || 30, status || 'Active',
+        id, req.user!.companyId
+      ]
+    );
+    if (result.rows.length === 0) {
+      errorResponse(res, 'المورد غير موجود', 404);
+      return;
+    }
+    successResponse(res, result.rows[0], 'تم تحديث المورد بنجاح');
+  } catch (error) {
+    errorResponse(res, 'خطأ في تحديث المورد', 500);
   }
 };
 
