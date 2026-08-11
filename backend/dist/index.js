@@ -23,7 +23,15 @@ const PORT = parseInt(process.env.PORT || '5000');
 app.use((0, helmet_1.default)({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 // ── CORS Configuration ───────────────────────────────────────────
 app.use((0, cors_1.default)({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps, curl, serverless) or any matching domain
+        if (!origin || process.env.NODE_ENV !== 'production' || process.env.FRONTEND_URL === '*' || origin.includes('vercel.app') || origin === process.env.FRONTEND_URL) {
+            callback(null, true);
+        }
+        else {
+            callback(null, true); // Permissive CORS for deployed Vercel apps
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
