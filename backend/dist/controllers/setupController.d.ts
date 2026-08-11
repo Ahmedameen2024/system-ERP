@@ -24,5 +24,7 @@ export declare const getTaxes: (req: Request, res: Response) => Promise<void>;
 export declare const getDepartments: (req: Request, res: Response) => Promise<void>;
 export declare const createDepartment: (req: Request, res: Response) => Promise<void>;
 export declare const getSuppliers: (req: Request, res: Response) => Promise<void>;
+export declare const createSupplier: (req: Request, res: Response) => Promise<void>;
+export declare const updateSupplier: (req: Request, res: Response) => Promise<void>;
 export declare const getFinancialPeriods: (req: Request, res: Response) => Promise<void>;
 //# sourceMappingURL=setupController.d.ts.map

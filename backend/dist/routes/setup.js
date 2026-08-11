@@ -74,6 +74,8 @@ router.get('/taxes', setup.getTaxes);
 router.get('/departments', setup.getDepartments);
 router.post('/departments', (0, auth_1.authorize)('system', 'branches', 'create'), setup.createDepartment);
 router.get('/suppliers', setup.getSuppliers);
+router.post('/suppliers', setup.createSupplier);
+router.put('/suppliers/:id', setup.updateSupplier);
 router.get('/financial-periods', setup.getFinancialPeriods);
 // Cash & Bank Masters under Setup
 router.get('/cash-boxes', cashBanks.getCashBoxes);

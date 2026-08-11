@@ -40,7 +40,7 @@ export default function CustomersPage() {
   const [activeTab, setActiveTab] = useState<'basic' | 'financial'>('basic');
   const [form, setForm] = useState(EMPTY_FORM);
 
-  const { data: customers = [], isLoading, isError, refetch } = useQuery({
+  const { data: customers = [], isLoading } = useQuery({
     queryKey: ['customers'],
     queryFn: async () => {
       const r = await api.get('/sales/customers');

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFinancialPeriods = exports.getSuppliers = exports.createDepartment = exports.getDepartments = exports.getTaxes = exports.getPaymentMethods = exports.updateSettings = exports.getSettings = exports.updatePermissions = exports.getPermissions = exports.createRole = exports.getRoles = exports.updateUser = exports.createUser = exports.getUsers = exports.createExchangeRate = exports.getExchangeRates = exports.updateCurrency = exports.createCurrency = exports.getCurrencies = exports.deleteBranch = exports.updateBranch = exports.createBranch = exports.getBranches = exports.updateCompany = exports.getCompany = void 0;
+exports.getFinancialPeriods = exports.updateSupplier = exports.createSupplier = exports.getSuppliers = exports.createDepartment = exports.getDepartments = exports.getTaxes = exports.getPaymentMethods = exports.updateSettings = exports.getSettings = exports.updatePermissions = exports.getPermissions = exports.createRole = exports.getRoles = exports.updateUser = exports.createUser = exports.getUsers = exports.createExchangeRate = exports.getExchangeRates = exports.updateCurrency = exports.createCurrency = exports.getCurrencies = exports.deleteBranch = exports.updateBranch = exports.createBranch = exports.getBranches = exports.updateCompany = exports.getCompany = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const db_1 = require("../config/db");
 const response_1 = require("../utils/response");
@@ -390,7 +390,7 @@ exports.createDepartment = createDepartment;
 // ========== SUPPLIERS ==========
 const getSuppliers = async (req, res) => {
     try {
-        const result = await (0, db_1.query)(`SELECT s.*, cu.code AS currency_code FROM suppliers s
+        const result = await (0, db_1.query)(`SELECT s.*, cu.code AS currency_code, cu.name_ar AS currency_name FROM suppliers s
        LEFT JOIN currencies cu ON s.currency_id = cu.id
        WHERE s.company_id = $1 ORDER BY s.code`, [req.user.companyId]);
         (0, response_1.successResponse)(res, result.rows);
@@ -400,6 +400,78 @@ const getSuppliers = async (req, res) => {
     }
 };
 exports.getSuppliers = getSuppliers;
+const createSupplier = async (req, res) => {
+    try {
+        const { code, nameAr, nameEn, contactPerson, phone, email, city, address, taxNumber, crNumber, creditLimit, openingBalance, currencyId, apAccountId, paymentTerms, status } = req.body;
+        if (!currencyId) {
+            (0, response_1.errorResponse)(res, 'العملة مطلوبة', 400);
+            return;
+        }
+        if (!nameAr) {
+            (0, response_1.errorResponse)(res, 'الاسم العربي مطلوب', 400);
+            return;
+        }
+        // Auto-generate code if not provided
+        let supplierCode = code;
+        if (!supplierCode) {
+            const countResult = await (0, db_1.query)(`SELECT COUNT(*) FROM suppliers WHERE company_id = $1`, [req.user.companyId]);
+            const count = parseInt(countResult.rows[0].count) + 1;
+            supplierCode = 'SUP-' + String(count).padStart(4, '0');
+        }
+        const creditLimitValue = (creditLimit !== undefined && creditLimit !== null && creditLimit !== '')
+            ? parseFloat(creditLimit)
+            : null;
+        const result = await (0, db_1.query)(`INSERT INTO suppliers 
+        (company_id, code, name_ar, name_en, contact_person, phone, email, city, address,
+         tax_number, cr_number, credit_limit, currency_id,
+         ap_account_id, payment_terms, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+       RETURNING *`, [
+            req.user.companyId, supplierCode, nameAr, nameEn || null, contactPerson || null,
+            phone || null, email || null, city || null, address || null,
+            taxNumber || null, crNumber || null, creditLimitValue,
+            currencyId || null, apAccountId || null, paymentTerms || 30, status || 'Active'
+        ]);
+        (0, response_1.successResponse)(res, result.rows[0], 'تم إضافة المورد بنجاح', 201);
+    }
+    catch (error) {
+        if (error.code === '23505') {
+            (0, response_1.errorResponse)(res, 'كود المورد موجود مسبقاً', 409);
+        }
+        else {
+            (0, response_1.errorResponse)(res, 'خطأ في إضافة المورد', 500);
+        }
+    }
+};
+exports.createSupplier = createSupplier;
+const updateSupplier = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nameAr, nameEn, contactPerson, phone, email, city, address, taxNumber, crNumber, creditLimit, currencyId, apAccountId, paymentTerms, status } = req.body;
+        const creditLimitValue = (creditLimit !== undefined && creditLimit !== null && creditLimit !== '')
+            ? parseFloat(creditLimit)
+            : null;
+        const result = await (0, db_1.query)(`UPDATE suppliers SET
+        name_ar=$1, name_en=$2, contact_person=$3, phone=$4, email=$5,
+        city=$6, address=$7, tax_number=$8, cr_number=$9, credit_limit=$10,
+        currency_id=$11, ap_account_id=$12, payment_terms=$13, status=$14
+       WHERE id=$15 AND company_id=$16 RETURNING *`, [
+            nameAr, nameEn || null, contactPerson || null, phone || null, email || null,
+            city || null, address || null, taxNumber || null, crNumber || null, creditLimitValue,
+            currencyId || null, apAccountId || null, paymentTerms || 30, status || 'Active',
+            id, req.user.companyId
+        ]);
+        if (result.rows.length === 0) {
+            (0, response_1.errorResponse)(res, 'المورد غير موجود', 404);
+            return;
+        }
+        (0, response_1.successResponse)(res, result.rows[0], 'تم تحديث المورد بنجاح');
+    }
+    catch (error) {
+        (0, response_1.errorResponse)(res, 'خطأ في تحديث المورد', 500);
+    }
+};
+exports.updateSupplier = updateSupplier;
 // ========== FINANCIAL PERIODS ==========
 const getFinancialPeriods = async (req, res) => {
     try {

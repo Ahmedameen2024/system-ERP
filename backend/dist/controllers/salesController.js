@@ -18,9 +18,9 @@ const getCustomers = async (req, res) => {
 exports.getCustomers = getCustomers;
 const createCustomer = async (req, res) => {
     try {
-        const { code, nameAr, nameEn, tradeName, phone, email, city, address, taxNumber, crNumber, creditLimit, openingBalance, currencyId, arAccountId, paymentTerms, status } = req.body;
-        const result = await (0, db_1.query)(`INSERT INTO customers (company_id, code, name_ar, name_en, trade_name, phone, email, city, address, tax_number, cr_number, credit_limit, opening_balance, balance, currency_id, ar_account_id, payment_terms, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13,$14,$15,$16,$17) RETURNING *`, [req.user.companyId, code, nameAr, nameEn, tradeName || '', phone || '', email || '', city || '', address || '', taxNumber || '', crNumber || '', creditLimit || 0, openingBalance || 0, currencyId || null, arAccountId || null, paymentTerms || 30, status || 'Active']);
+        const { code, nameAr, nameEn, tradeName, phone, email, city, address, taxNumber, crNumber, creditLimit, currencyId, arAccountId, paymentTerms, status } = req.body;
+        const result = await (0, db_1.query)(`INSERT INTO customers (company_id, code, name_ar, name_en, trade_name, phone, email, city, address, tax_number, cr_number, credit_limit, currency_id, ar_account_id, payment_terms, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`, [req.user.companyId, code, nameAr, nameEn, tradeName || '', phone || '', email || '', city || '', address || '', taxNumber || '', crNumber || '', creditLimit || 0, currencyId || null, arAccountId || null, paymentTerms || 30, status || 'Active']);
         (0, response_1.successResponse)(res, result.rows[0], 'تم إضافة العميل بنجاح', 201);
     }
     catch (error) {

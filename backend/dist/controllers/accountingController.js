@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updatePaymentVoucherStatus = exports.createPaymentVoucher = exports.getPaymentVouchers = exports.updateReceiptVoucherStatus = exports.createReceiptVoucher = exports.getReceiptVouchers = exports.deleteJournalEntry = exports.updateJournalEntryStatus = exports.updateJournalEntry = exports.createJournalEntry = exports.getJournalEntryById = exports.getJournalEntries = exports.updateCostCenter = exports.createCostCenter = exports.getCostCenters = exports.updateAccount = exports.createAccount = exports.getAccounts = void 0;
+exports.postOpeningBalance = exports.deleteOpeningBalance = exports.updateOpeningBalance = exports.createOpeningBalance = exports.getOpeningBalances = exports.updatePaymentVoucherStatus = exports.createPaymentVoucher = exports.getPaymentVouchers = exports.updateReceiptVoucherStatus = exports.createReceiptVoucher = exports.getReceiptVouchers = exports.deleteJournalEntry = exports.updateJournalEntryStatus = exports.updateJournalEntry = exports.createJournalEntry = exports.getJournalEntryById = exports.getJournalEntries = exports.updateCostCenter = exports.createCostCenter = exports.getCostCenters = exports.updateAccount = exports.createAccount = exports.getAccounts = void 0;
 const db_1 = require("../config/db");
 const response_1 = require("../utils/response");
 // ========== GL ACCOUNTS ==========
@@ -1025,4 +1025,141 @@ async function executePaymentVoucherReversal(client, voucher, userId) {
     await client.query(`INSERT INTO audit_logs (user_id, action_type, table_name, record_id, description)
      VALUES ($1, 'VOID', 'payment_vouchers', $2, $3)`, [userId, voucher.id, `عكس سند الصرف رقم ${voucher.voucher_number}`]);
 }
+// ========== OPENING BALANCES ==========
+const getOpeningBalances = async (req, res) => {
+    try {
+        const result = await (0, db_1.query)(`SELECT ob.*, 
+              c.code AS currency_code, c.name_ar AS currency_name, c.symbol AS currency_symbol,
+              acc.code AS account_code, acc.name_ar AS account_name,
+              CASE 
+                WHEN ob.party_type = 'Customer' THEN (SELECT name_ar FROM customers WHERE id = ob.party_id)
+                WHEN ob.party_type = 'Supplier' THEN (SELECT name_ar FROM suppliers WHERE id = ob.party_id)
+                WHEN ob.party_type = 'Bank' THEN (SELECT name_ar FROM bank_accounts WHERE id = ob.party_id)
+                WHEN ob.party_type = 'CashBox' THEN (SELECT name_ar FROM cash_boxes WHERE id = ob.party_id)
+                WHEN ob.party_type = 'Employee' THEN (SELECT name_ar FROM employees WHERE id = ob.party_id)
+                ELSE NULL
+              END AS party_name
+       FROM opening_balances ob
+       JOIN currencies c ON ob.currency_id = c.id
+       LEFT JOIN gl_accounts acc ON ob.account_id = acc.id
+       WHERE ob.company_id = $1
+       ORDER BY ob.opening_date DESC, ob.created_at DESC`, [req.user.companyId]);
+        (0, response_1.successResponse)(res, result.rows);
+    }
+    catch (error) {
+        (0, response_1.errorResponse)(res, 'خطأ في جلب الأرصدة الافتتاحية', 500);
+    }
+};
+exports.getOpeningBalances = getOpeningBalances;
+const createOpeningBalance = async (req, res) => {
+    try {
+        const { partyType, partyId, accountId, currencyId, nature, foreignAmount, exchangeRate, openingDate, notes } = req.body;
+        if (!partyType || !currencyId || foreignAmount === undefined || foreignAmount === null) {
+            (0, response_1.errorResponse)(res, 'جميع الحقول الأساسية مطلوبة (نوع الطرف والعملة والمبلغ)', 400);
+            return;
+        }
+        const rate = parseFloat(exchangeRate) || 1.0;
+        const fAmt = parseFloat(foreignAmount);
+        const bAmt = fAmt * rate;
+        const result = await (0, db_1.query)(`INSERT INTO opening_balances (company_id, party_type, party_id, account_id, currency_id, nature, foreign_amount, exchange_rate, base_amount, opening_date, status, notes, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'Draft', $11, $12)
+       RETURNING *`, [req.user.companyId, partyType, partyId || null, accountId || null, currencyId, nature || 'Debit', fAmt, rate, bAmt, openingDate || new Date(), notes || null, req.user.userId]);
+        (0, response_1.successResponse)(res, result.rows[0], 'تم إضافة الرصيد الافتتاحي بنجاح', 201);
+    }
+    catch (error) {
+        (0, response_1.errorResponse)(res, 'خطأ في إضافة الرصيد الافتتاحي', 500);
+    }
+};
+exports.createOpeningBalance = createOpeningBalance;
+const updateOpeningBalance = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { partyType, partyId, accountId, currencyId, nature, foreignAmount, exchangeRate, openingDate, notes } = req.body;
+        const rate = parseFloat(exchangeRate) || 1.0;
+        const fAmt = parseFloat(foreignAmount);
+        const bAmt = fAmt * rate;
+        const result = await (0, db_1.query)(`UPDATE opening_balances SET
+        party_type=$1, party_id=$2, account_id=$3, currency_id=$4, nature=$5,
+        foreign_amount=$6, exchange_rate=$7, base_amount=$8, opening_date=$9, notes=$10, updated_at=NOW()
+       WHERE id=$11 AND company_id=$12 AND status='Draft' RETURNING *`, [partyType, partyId || null, accountId || null, currencyId, nature || 'Debit', fAmt, rate, bAmt, openingDate, notes || null, id, req.user.companyId]);
+        if (result.rows.length === 0) {
+            (0, response_1.errorResponse)(res, 'الرصيد الافتتاحي غير موجود أو تم اعتماده مسبقاً', 400);
+            return;
+        }
+        (0, response_1.successResponse)(res, result.rows[0], 'تم تحديث الرصيد الافتتاحي بنجاح');
+    }
+    catch (error) {
+        (0, response_1.errorResponse)(res, 'خطأ في تحديث الرصيد الافتتاحي', 500);
+    }
+};
+exports.updateOpeningBalance = updateOpeningBalance;
+const deleteOpeningBalance = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await (0, db_1.query)(`DELETE FROM opening_balances WHERE id=$1 AND company_id=$2 AND status='Draft' RETURNING *`, [id, req.user.companyId]);
+        if (result.rows.length === 0) {
+            (0, response_1.errorResponse)(res, 'الرصيد الافتتاحي غير موجود أو لا يمكن حذفه', 400);
+            return;
+        }
+        (0, response_1.successResponse)(res, null, 'تم حذف الرصيد الافتتاحي بنجاح');
+    }
+    catch (error) {
+        (0, response_1.errorResponse)(res, 'خطأ في حذف الرصيد الافتتاحي', 500);
+    }
+};
+exports.deleteOpeningBalance = deleteOpeningBalance;
+const postOpeningBalance = async (req, res) => {
+    try {
+        const { id } = req.params;
+        await (0, db_1.transaction)(async (client) => {
+            const obRes = await client.query(`SELECT * FROM opening_balances WHERE id=$1 AND company_id=$2 AND status='Draft'`, [id, req.user.companyId]);
+            if (obRes.rows.length === 0) {
+                throw new Error('الرصيد الافتتاحي غير موجود أو معتمد مسبقاً');
+            }
+            const ob = obRes.rows[0];
+            // Generate journal entry number
+            const countRes = await client.query(`SELECT COUNT(*) FROM journal_entries`);
+            const entryNo = 'OB-JE-' + String(parseInt(countRes.rows[0].count) + 1).padStart(5, '0');
+            // Create Journal Entry Header
+            const jeRes = await client.query(`INSERT INTO journal_entries (entry_number, entry_date, description, reference_no, reference_type, reference_id, status, currency_id, exchange_rate, total_debit, total_credit, created_by, approved_by, posted_at)
+         VALUES ($1, $2, $3, $4, 'OpeningBalance', $5, 'Posted', $6, $7, $8, $8, $9, $9, NOW())
+         RETURNING id`, [
+                entryNo, ob.opening_date, `رصيد افتتاحي: ${ob.party_type} - ${ob.notes || ''}`, entryNo, ob.id,
+                ob.currency_id, ob.exchange_rate, ob.base_amount, req.user.userId
+            ]);
+            const jeId = jeRes.rows[0].id;
+            // Debit and Credit lines
+            const isDebit = ob.nature === 'Debit';
+            const debitAmt = isDebit ? ob.foreign_amount : 0;
+            const creditAmt = isDebit ? 0 : ob.foreign_amount;
+            const debitBase = isDebit ? ob.base_amount : 0;
+            const creditBase = isDebit ? 0 : ob.base_amount;
+            // Line 1: Main account line
+            await client.query(`INSERT INTO journal_entry_lines (journal_entry_id, gl_account_id, customer_id, supplier_id, debit, credit, debit_base, credit_base, line_description)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [
+                jeId, ob.account_id,
+                ob.party_type === 'Customer' ? ob.party_id : null,
+                ob.party_type === 'Supplier' ? ob.party_id : null,
+                debitAmt, creditAmt, debitBase, creditBase,
+                `رصيد افتتاحي ${ob.party_type}`
+            ]);
+            // Line 2: Equity line (code 31 or account_type Equity)
+            const equityRes = await client.query(`SELECT id FROM gl_accounts WHERE company_id=$1 AND (code='31' OR code='32' OR account_type='Equity') LIMIT 1`, [req.user.companyId]);
+            const equityAccId = equityRes.rows[0]?.id || ob.account_id;
+            await client.query(`INSERT INTO journal_entry_lines (journal_entry_id, gl_account_id, debit, credit, debit_base, credit_base, line_description)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`, [
+                jeId, equityAccId,
+                creditAmt, debitAmt, creditBase, debitBase,
+                `حساب رأس المال / الأرباح المحتجزة الافتتاحي`
+            ]);
+            // Update opening balance record
+            await client.query(`UPDATE opening_balances SET status='Posted', journal_entry_id=$1, updated_at=NOW() WHERE id=$2`, [jeId, id]);
+        });
+        (0, response_1.successResponse)(res, null, 'تم اعتماد الرصيد الافتتاحي وتوليد القيد المحاسبي بنجاح');
+    }
+    catch (error) {
+        (0, response_1.errorResponse)(res, error.message || 'خطأ في اعتماد الرصيد الافتتاحي', 500);
+    }
+};
+exports.postOpeningBalance = postOpeningBalance;
 //# sourceMappingURL=accountingController.js.map

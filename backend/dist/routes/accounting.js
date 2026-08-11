@@ -53,7 +53,12 @@ router.get('/journal-entries/:id', (0, auth_1.authorize)('accounting', 'journal_
 router.post('/journal-entries', (0, auth_1.authorize)('accounting', 'journal_entries', 'create'), accounting.createJournalEntry);
 router.put('/journal-entries/:id', (0, auth_1.authorize)('accounting', 'journal_entries', 'edit'), accounting.updateJournalEntry);
 router.put('/journal-entries/:id/status', (0, auth_1.authorize)('accounting', 'journal_entries', 'edit'), accounting.updateJournalEntryStatus);
-router.delete('/journal-entries/:id', (0, auth_1.authorize)('accounting', 'journal_entries', 'delete'), accounting.deleteJournalEntry);
+// Opening Balances
+router.get('/opening-balances', (0, auth_1.authorize)('accounting', 'chart_of_accounts', 'view'), accounting.getOpeningBalances);
+router.post('/opening-balances', (0, auth_1.authorize)('accounting', 'chart_of_accounts', 'create'), accounting.createOpeningBalance);
+router.put('/opening-balances/:id', (0, auth_1.authorize)('accounting', 'chart_of_accounts', 'edit'), accounting.updateOpeningBalance);
+router.delete('/opening-balances/:id', (0, auth_1.authorize)('accounting', 'chart_of_accounts', 'delete'), accounting.deleteOpeningBalance);
+router.post('/opening-balances/:id/post', (0, auth_1.authorize)('accounting', 'chart_of_accounts', 'approve'), accounting.postOpeningBalance);
 // Receipt Vouchers
 router.get('/receipt-vouchers', (0, auth_1.authorize)('vouchers', 'receipt_vouchers', 'view'), accounting.getReceiptVouchers);
 router.post('/receipt-vouchers', (0, auth_1.authorize)('vouchers', 'receipt_vouchers', 'create'), accounting.createReceiptVoucher);
