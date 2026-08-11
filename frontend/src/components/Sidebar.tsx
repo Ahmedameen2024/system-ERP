@@ -15,6 +15,7 @@ const navItems: NavItem[] = [
     path: '/accounting/chart-of-accounts', icon: 'account_tree', label: 'دليل الحسابات',
   },
   { path: '/accounting/journal-entries', icon: 'edit_note', label: 'القيود اليومية العامة' },
+  { path: '/accounting/opening-balances', icon: 'account_balance_wallet', label: 'الأرصدة الافتتاحية' },
   { path: '/accounting/trial-balance', icon: 'balance', label: 'ميزان المراجعة' },
   { path: '/accounting/account-details', icon: 'receipt_long', label: 'كشف الحساب' },
   { path: '/accounting/financial-statements', icon: 'description', label: 'القوائم المالية' },

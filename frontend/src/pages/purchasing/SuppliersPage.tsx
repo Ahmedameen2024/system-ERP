@@ -104,13 +104,9 @@ export default function SuppliersPage() {
   const validate = (): boolean => {
     const errors: Partial<Record<keyof SupplierForm, string>> = {};
     if (!form.nameAr.trim()) errors.nameAr = 'الاسم العربي مطلوب';
-    if (!form.currencyId) errors.currencyId = 'يجب اختيار العملة';
     if (form.creditLimit !== '' && form.creditLimit !== null) {
       const val = parseFloat(form.creditLimit);
       if (isNaN(val) || val < 0) errors.creditLimit = 'الحد الائتماني يجب أن يكون رقماً موجباً أو صفراً';
-    }
-    if (form.openingBalance !== '' && isNaN(parseFloat(form.openingBalance))) {
-      errors.openingBalance = 'الرصيد الافتتاحي يجب أن يكون رقماً';
     }
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -420,73 +416,19 @@ export default function SuppliersPage() {
                   {/* Currency */}
                   <div>
                     <label>
-                      العملة <span style={{ color: 'var(--color-error)' }}>*</span>
+                      العملة المفضل التعامل بها <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>(اختياري)</span>
                     </label>
                     <select
                       id="supplier-currency"
-                      className={`input${validationErrors.currencyId ? ' input-error' : ''}`}
+                      className="input"
                       value={form.currencyId}
-                      onChange={e => { setForm({ ...form, currencyId: e.target.value }); setValidationErrors(v => ({ ...v, currencyId: undefined })); }}
+                      onChange={e => setForm({ ...form, currencyId: e.target.value })}
                     >
-                      <option value="">-- اختر العملة --</option>
+                      <option value="">-- اختيار عام / لا يوجد --</option>
                       {currencies.map(c => (
                         <option key={c.id} value={c.id}>{c.code} — {c.name_ar}</option>
                       ))}
                     </select>
-                    {validationErrors.currencyId && (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-error)' }}>{validationErrors.currencyId}</span>
-                    )}
-                  </div>
-
-                  {/* Opening Balance */}
-                  <div>
-                    <label>
-                      الرصيد الافتتاحي المستحق
-                      {selectedCurrency && (
-                        <span style={{
-                          marginRight: 6,
-                          background: 'var(--color-primary-subtle)',
-                          color: 'var(--color-primary)',
-                          borderRadius: 4,
-                          padding: '1px 7px',
-                          fontSize: '0.75rem',
-                          fontWeight: 700
-                        }}>
-                          {selectedCurrency.code}
-                        </span>
-                      )}
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        className="input numeric"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={form.openingBalance}
-                        onChange={e => setForm({ ...form, openingBalance: e.target.value })}
-                        disabled={!!editItem}
-                        placeholder="0.00"
-                        style={editItem ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
-                      />
-                      {selectedCurrency && (
-                        <span style={{
-                          position: 'absolute',
-                          left: 10,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          fontSize: '0.75rem',
-                          color: 'var(--color-text-muted)',
-                          pointerEvents: 'none'
-                        }}>
-                          {selectedCurrency.code}
-                        </span>
-                      )}
-                    </div>
-                    {editItem && (
-                      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                        لا يمكن تعديل الرصيد الافتتاحي بعد الإنشاء
-                      </span>
-                    )}
                   </div>
 
                   {/* Credit Limit */}

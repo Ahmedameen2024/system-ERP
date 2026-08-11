@@ -23,7 +23,12 @@ router.get('/journal-entries/:id', authorize('accounting', 'journal_entries', 'v
 router.post('/journal-entries', authorize('accounting', 'journal_entries', 'create'), accounting.createJournalEntry);
 router.put('/journal-entries/:id', authorize('accounting', 'journal_entries', 'edit'), accounting.updateJournalEntry);
 router.put('/journal-entries/:id/status', authorize('accounting', 'journal_entries', 'edit'), accounting.updateJournalEntryStatus);
-router.delete('/journal-entries/:id', authorize('accounting', 'journal_entries', 'delete'), accounting.deleteJournalEntry);
+// Opening Balances
+router.get('/opening-balances', authorize('accounting', 'chart_of_accounts', 'view'), accounting.getOpeningBalances);
+router.post('/opening-balances', authorize('accounting', 'chart_of_accounts', 'create'), accounting.createOpeningBalance);
+router.put('/opening-balances/:id', authorize('accounting', 'chart_of_accounts', 'edit'), accounting.updateOpeningBalance);
+router.delete('/opening-balances/:id', authorize('accounting', 'chart_of_accounts', 'delete'), accounting.deleteOpeningBalance);
+router.post('/opening-balances/:id/post', authorize('accounting', 'chart_of_accounts', 'approve'), accounting.postOpeningBalance);
 
 
 // Receipt Vouchers

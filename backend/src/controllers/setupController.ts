@@ -445,20 +445,18 @@ export const createSupplier = async (req: Request, res: Response): Promise<void>
       ? parseFloat(creditLimit) 
       : null;
 
-    const openingBal = openingBalance ? parseFloat(openingBalance) : 0;
-
     const result = await query(
       `INSERT INTO suppliers 
         (company_id, code, name_ar, name_en, contact_person, phone, email, city, address,
-         tax_number, cr_number, credit_limit, opening_balance, balance, currency_id,
+         tax_number, cr_number, credit_limit, currency_id,
          ap_account_id, payment_terms, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        RETURNING *`,
       [
         req.user!.companyId, supplierCode, nameAr, nameEn || null, contactPerson || null,
         phone || null, email || null, city || null, address || null,
-        taxNumber || null, crNumber || null, creditLimitValue, openingBal, openingBal,
-        currencyId, apAccountId || null, paymentTerms || 30, status || 'Active'
+        taxNumber || null, crNumber || null, creditLimitValue,
+        currencyId || null, apAccountId || null, paymentTerms || 30, status || 'Active'
       ]
     );
     successResponse(res, result.rows[0], 'تم إضافة المورد بنجاح', 201);
@@ -480,11 +478,6 @@ export const updateSupplier = async (req: Request, res: Response): Promise<void>
       apAccountId, paymentTerms, status
     } = req.body;
 
-    if (!currencyId) {
-      errorResponse(res, 'العملة مطلوبة', 400);
-      return;
-    }
-
     const creditLimitValue = (creditLimit !== undefined && creditLimit !== null && creditLimit !== '')
       ? parseFloat(creditLimit)
       : null;
@@ -498,7 +491,7 @@ export const updateSupplier = async (req: Request, res: Response): Promise<void>
       [
         nameAr, nameEn || null, contactPerson || null, phone || null, email || null,
         city || null, address || null, taxNumber || null, crNumber || null, creditLimitValue,
-        currencyId, apAccountId || null, paymentTerms || 30, status || 'Active',
+        currencyId || null, apAccountId || null, paymentTerms || 30, status || 'Active',
         id, req.user!.companyId
       ]
     );

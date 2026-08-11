@@ -14,6 +14,7 @@ const TrialBalance = React.lazy(() => import('./pages/accounting/TrialBalance'))
 const AccountDetails = React.lazy(() => import('./pages/accounting/AccountDetails'));
 const FinancialStatements = React.lazy(() => import('./pages/accounting/FinancialStatements'));
 const JournalEntries = React.lazy(() => import('./pages/accounting/JournalEntries'));
+const OpeningBalancesPage = React.lazy(() => import('./pages/accounting/OpeningBalancesPage'));
 const SystemConfiguration = React.lazy(() => import('./pages/system/SystemConfiguration'));
 const CashBanksManagement = React.lazy(() => import('./pages/system/CashBanksManagement'));
 const BranchManagement = React.lazy(() => import('./pages/system/BranchManagement'));
@@ -95,6 +96,7 @@ export default function App() {
               <Route path="accounting/chart-of-accounts" element={<ChartOfAccounts />} />
               <Route path="accounting/cost-centers" element={<CostCenters />} />
               <Route path="accounting/journal-entries" element={<JournalEntries />} />
+              <Route path="accounting/opening-balances" element={<OpeningBalancesPage />} />
 
               <Route path="accounting/transaction-analysis" element={<Navigate to="/accounting/journal-entries" replace />} />
               <Route path="accounting/trial-balance" element={<TrialBalance />} />

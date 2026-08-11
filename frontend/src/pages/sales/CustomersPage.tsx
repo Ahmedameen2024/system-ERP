@@ -323,12 +323,6 @@ export default function CustomersPage() {
                     <label>شروط الدفع (أيام)</label>
                     <input className="input numeric" type="number" value={form.paymentTerms} onChange={e => setForm({ ...form, paymentTerms: parseInt(e.target.value) || 30 })} />
                   </div>
-                  {!editItem && (
-                    <div>
-                      <label>الرصيد الافتتاحي</label>
-                      <input className="input numeric" type="number" step="0.01" value={form.openingBalance} onChange={e => setForm({ ...form, openingBalance: parseFloat(e.target.value) || 0 })} />
-                    </div>
-                  )}
                   <div style={{ gridColumn: '1 / -1' }}>
                     <label>حساب المدينين (AR Account)</label>
                     <select className="input" value={form.arAccountId} onChange={e => setForm({ ...form, arAccountId: e.target.value })}>
