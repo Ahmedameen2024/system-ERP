@@ -44,6 +44,14 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
 
+// ── Path Normalization Middleware for Serverless ──────────────────
+app.use((req, _res, next) => {
+  if (!req.url.startsWith('/api/') && req.url !== '/api') {
+    req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
+  }
+  next();
+});
+
 // ── Health Check ─────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -70,21 +78,23 @@ app.use((_req, res) => {
 // ── Global Error Handler ─────────────────────────────────────────
 app.use(errorHandler);
 
-// ── Start Server ─────────────────────────────────────────────────
-const startServer = async () => {
-  try {
-    await testConnection();
-    app.listen(PORT, () => {
-      console.log(`\n🚀 ERP API Server running on http://localhost:${PORT}`);
-      console.log(`📚 API Base URL: http://localhost:${PORT}/api`);
-      console.log(`🔑 Auth Endpoint: http://localhost:${PORT}/api/auth/login\n`);
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
-};
+// ── Start Server (Only in Standalone Mode, Not Vercel Serverless) ─
+if (!process.env.VERCEL) {
+  const startServer = async () => {
+    try {
+      await testConnection();
+      app.listen(PORT, () => {
+        console.log(`\n🚀 ERP API Server running on http://localhost:${PORT}`);
+        console.log(`📚 API Base URL: http://localhost:${PORT}/api`);
+        console.log(`🔑 Auth Endpoint: http://localhost:${PORT}/api/auth/login\n`);
+      });
+    } catch (error) {
+      console.error('Failed to start server:', error);
+      process.exit(1);
+    }
+  };
 
-startServer();
+  startServer();
+}
 
 export default app;
