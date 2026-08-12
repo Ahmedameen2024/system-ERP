@@ -41,7 +41,7 @@ export default function Login() {
       <header className="eq-header">
         <div className="eq-header-container">
           <div className="eq-brand">
-            <span className="eq-brand-title">Equilibrium Finance</span>
+            <span className="eq-brand-title">نظام إدارة الموارد المؤسسية</span>
           </div>
 
           <nav className="eq-nav">
@@ -68,7 +68,7 @@ export default function Login() {
           {/* Hero Left / Right in RTL: Text Side */}
           <div className="eq-hero-content">
             <h1 className="eq-hero-heading">
-              مرحباً بكم في <span className="eq-highlight">إيكويليبريوم المالية</span>
+              مرحباً بكم في <span className="eq-highlight">نظام إدارة الموارد المؤسسية</span>
             </h1>
             <p className="eq-hero-subtext">
               النظام المتكامل لإدارة الموارد المؤسسية (ERP) المصمم بذكاء لدعم النمو والابتكار المالي. نوفر لك الأدوات اللازمة للتحكم الكامل في عملياتك المالية والإدارية بدقة متناهية عبر الذكاء الاصطناعي.
@@ -304,7 +304,7 @@ export default function Login() {
       <footer className="eq-footer">
         <div className="eq-footer-top">
           <div className="eq-footer-brand">
-            <div className="eq-footer-logo">Equilibrium Finance</div>
+            <div className="eq-footer-logo">نظام إدارة الموارد المؤسسية</div>
             <p className="eq-footer-desc">الحل الأمثل لإدارة الموارد المالية والبشرية بذكاء وكفاءة.</p>
           </div>
 
@@ -328,7 +328,7 @@ export default function Login() {
 
         <div className="eq-footer-bottom">
           <div className="eq-footer-copyright">
-            .Equilibrium Finance, All rights reserved 2024 ©
+            نظام إدارة الموارد المؤسسية. جميع الحقوق محفوظة © 2024
           </div>
           <div className="eq-footer-legal">
             <a href="#privacy" onClick={(e) => e.preventDefault()}>Privacy Policy</a>
