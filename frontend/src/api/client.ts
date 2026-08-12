@@ -7,6 +7,17 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Warn in production if baseURL falls back to same-origin '/api'
+try {
+  // Runtime check only in browsers
+  if (typeof window !== 'undefined' && import.meta.env.PROD && baseURL === '/api') {
+    // eslint-disable-next-line no-console
+    console.warn('Warning: VITE_API_BASE_URL is not set. API requests will target same-origin /api which may be incorrect for deployed frontend. Set VITE_API_BASE_URL in your environment.');
+  }
+} catch (e) {
+  // ignore
+}
+
 // Attach JWT token to every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('erp_token');
@@ -57,7 +68,9 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const res = await axios.post('/api/auth/refresh', { refreshToken });
+        // Use the configured baseURL to call refresh directly (avoid same-origin '/api' fallback)
+        const refreshUrl = `${baseURL.replace(/\/$/, '')}/auth/refresh`;
+        const res = await axios.post(refreshUrl, { refreshToken });
         const newToken = res.data.data?.token;
         if (newToken) {
           localStorage.setItem('erp_token', newToken);

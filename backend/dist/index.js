@@ -51,21 +51,29 @@ app.use((req, _res, next) => {
     next();
 });
 // ── Health Check ─────────────────────────────────────────────────
-app.get('/api/health', (_req, res) => {
+const healthHandler = (_req, res) => {
     res.json({
         status: 'ok',
         message: 'ERP API Server is running',
         timestamp: new Date().toISOString(),
         version: '1.0.0',
     });
-});
-// ── API Routes ───────────────────────────────────────────────────
+};
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
+// ── API Routes (Support both /api/ prefix and direct prefix) ─────
 app.use('/api/auth', auth_1.default);
+app.use('/auth', auth_1.default);
 app.use('/api/setup', setup_1.default);
+app.use('/setup', setup_1.default);
 app.use('/api/accounting', accounting_1.default);
+app.use('/accounting', accounting_1.default);
 app.use('/api/inventory', inventory_1.default);
+app.use('/inventory', inventory_1.default);
 app.use('/api/sales', sales_1.default);
+app.use('/sales', sales_1.default);
 app.use('/api/cash-banks', cashBanks_1.default);
+app.use('/cash-banks', cashBanks_1.default);
 // ── 404 Handler ──────────────────────────────────────────────────
 app.use((_req, res) => {
     res.status(404).json({ success: false, message: 'المسار غير موجود' });
