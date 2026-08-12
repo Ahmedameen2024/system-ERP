@@ -53,22 +53,35 @@ app.use((req, _res, next) => {
 });
 
 // ── Health Check ─────────────────────────────────────────────────
-app.get('/api/health', (_req, res) => {
+const healthHandler = (_req: express.Request, res: express.Response) => {
   res.json({
     status: 'ok',
     message: 'ERP API Server is running',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
   });
-});
+};
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
 
-// ── API Routes ───────────────────────────────────────────────────
+// ── API Routes (Support both /api/ prefix and direct prefix) ─────
 app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
+
 app.use('/api/setup', setupRoutes);
+app.use('/setup', setupRoutes);
+
 app.use('/api/accounting', accountingRoutes);
+app.use('/accounting', accountingRoutes);
+
 app.use('/api/inventory', inventoryRoutes);
+app.use('/inventory', inventoryRoutes);
+
 app.use('/api/sales', salesRoutes);
+app.use('/sales', salesRoutes);
+
 app.use('/api/cash-banks', cashBanksRoutes);
+app.use('/cash-banks', cashBanksRoutes);
 
 // ── 404 Handler ──────────────────────────────────────────────────
 app.use((_req, res) => {
