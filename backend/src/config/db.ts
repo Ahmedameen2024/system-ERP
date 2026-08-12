@@ -5,6 +5,18 @@ dotenv.config();
 
 const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
 
+const DEFAULT_SUPABASE_HOST = 'aws-1-ap-south-1.pooler.supabase.com';
+const DEFAULT_SUPABASE_PORT = '6543';
+const DEFAULT_SUPABASE_DB = 'postgres';
+const DEFAULT_SUPABASE_USER = 'postgres.ejtnanmgqtxhohymvcir';
+const DEFAULT_SUPABASE_PASS = 'system-ERP147*';
+
+const host = process.env.DB_HOST || (isProduction ? DEFAULT_SUPABASE_HOST : 'localhost');
+const port = parseInt(process.env.DB_PORT || (isProduction ? DEFAULT_SUPABASE_PORT : '5432'));
+const database = process.env.DB_NAME || (isProduction ? DEFAULT_SUPABASE_DB : 'stitch_erp');
+const user = process.env.DB_USER || (isProduction ? DEFAULT_SUPABASE_USER : 'postgres');
+const password = process.env.DB_PASSWORD || (isProduction ? DEFAULT_SUPABASE_PASS : 'postgres');
+
 const connectionConfig = process.env.DATABASE_URL || process.env.POSTGRES_URL
   ? {
       connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
@@ -14,15 +26,15 @@ const connectionConfig = process.env.DATABASE_URL || process.env.POSTGRES_URL
       connectionTimeoutMillis: 10000,
     }
   : {
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432'),
-      database: process.env.DB_NAME || 'stitch_erp',
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
+      host,
+      port,
+      database,
+      user,
+      password,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
-      ssl: process.env.DB_HOST && process.env.DB_HOST !== 'localhost' ? { rejectUnauthorized: false } : false,
+      ssl: host !== 'localhost' ? { rejectUnauthorized: false } : false,
     };
 
 const pool = new Pool(connectionConfig);
