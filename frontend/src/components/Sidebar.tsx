@@ -64,17 +64,30 @@ const sectionHeaders: Record<string, string> = {
   '/reports': 'التقارير والتحليلات',
 };
 
-export default function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
+}
+
+export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
+    if (onCloseMobile) onCloseMobile();
     navigate('/login');
+  };
+
+  const handleNavClick = () => {
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
   };
 
   return (
     <aside
+      className={`app-sidebar ${mobileOpen ? 'is-mobile-open' : ''}`}
       style={{
         position: 'fixed',
         right: 0,
@@ -91,7 +104,7 @@ export default function Sidebar() {
       }}
     >
       {/* Logo / Brand */}
-      <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--color-outline-variant)' }}>
+      <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--color-outline-variant)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div style={{
             width: 40, height: 40, borderRadius: '10px',
@@ -105,6 +118,16 @@ export default function Sidebar() {
             <div style={{ fontSize: '0.7rem', color: 'var(--color-on-surface-variant)', letterSpacing: '0.04em' }}>ERP SYSTEM</div>
           </div>
         </div>
+
+        {/* Mobile Close Button */}
+        <button
+          className="mobile-sidebar-close"
+          onClick={onCloseMobile}
+          title="إغلاق القائمة"
+          aria-label="إغلاق القائمة"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
+        </button>
       </div>
 
       {/* Navigation */}
@@ -131,6 +154,7 @@ export default function Sidebar() {
               )}
               <NavLink
                 to={item.path}
+                onClick={handleNavClick}
                 end={item.path.split('/').length <= 2}
                 style={({ isActive }) => ({
                   display: 'flex',

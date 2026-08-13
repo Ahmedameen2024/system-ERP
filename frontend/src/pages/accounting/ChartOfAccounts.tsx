@@ -143,7 +143,7 @@ export default function ChartOfAccounts() {
         />
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="card table-container" style={{ padding: 0 }}>
         {isLoading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
             <div className="spinner" />

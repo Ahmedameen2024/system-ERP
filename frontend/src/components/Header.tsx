@@ -36,7 +36,11 @@ const pageTitles: Record<string, string> = {
   '/reports': 'لوحة التقارير',
 };
 
-export default function Header() {
+interface HeaderProps {
+  onToggleMobileSidebar?: () => void;
+}
+
+export default function Header({ onToggleMobileSidebar }: HeaderProps) {
   const location = useLocation();
   const { user } = useAuthStore();
   const pageTitle = pageTitles[location.pathname] || 'نظام ERP';
@@ -48,6 +52,7 @@ export default function Header() {
 
   return (
     <header
+      className="app-header"
       style={{
         position: 'fixed',
         top: 0,
@@ -69,27 +74,41 @@ export default function Header() {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '0 1.5rem',
+        gap: '0.75rem',
       }}>
-        {/* Company Name (Right side - RTL) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-primary)' }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>corporate_fare</span>
-          <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>
-            {user?.companyNameAr || 'مؤسسة الأعمال الحديثة'}
-          </span>
+        {/* Company Name & Mobile Toggle (Right side - RTL) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--color-primary)' }}>
+          <button
+            className="mobile-menu-toggle"
+            onClick={onToggleMobileSidebar}
+            title="فتح القائمة"
+            aria-label="فتح القائمة"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 24 }}>menu</span>
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>corporate_fare</span>
+            <span className="header-company-name" style={{ fontWeight: 600, fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>
+              {user?.companyNameAr || 'مؤسسة الأعمال الحديثة'}
+            </span>
+          </div>
         </div>
 
         {/* Page Title (Center) */}
-        <div style={{
+        <div className="header-page-title" style={{
           fontWeight: 700,
           fontSize: '1.0625rem',
           color: 'var(--color-on-surface)',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
         }}>
           {pageTitle}
         </div>
 
         {/* Right controls (Left side in RTL) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div className="header-date-badge" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
             <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-on-surface-variant)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
               تاريخ اليوم
             </span>
@@ -106,6 +125,7 @@ export default function Header() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: 'var(--color-on-surface-variant)',
               transition: 'background 0.15s',
+              flexShrink: 0,
             }}
             title="الإشعارات"
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-container-high)')}
