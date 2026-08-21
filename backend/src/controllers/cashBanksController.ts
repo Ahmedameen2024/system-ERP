@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { query } from '../config/db';
+import { query, transaction } from '../config/db';
 import { successResponse, errorResponse } from '../utils/response';
 
 // Helper to record audit log
@@ -37,6 +37,7 @@ const logAudit = async (
 };
 
 // ==========================================
+// ==========================================
 // CASH BOXES MASTER CONTROLLER
 // ==========================================
 
@@ -52,7 +53,27 @@ export const getCashBoxes = async (req: Request, res: Response): Promise<void> =
              b.name_ar AS branch_name_ar, b.name_en AS branch_name_en,
              c.code AS currency_code, c.name_ar AS currency_name, c.symbol AS currency_symbol,
              gl.code AS gl_account_code, gl.name_ar AS gl_account_name,
-             u.name_ar AS responsible_employee_name
+             u.name_ar AS responsible_employee_name,
+             COALESCE(
+               (
+                 SELECT json_agg(
+                   json_build_object(
+                     'currency_id', cbc.currency_id,
+                     'currency_code', cur.code,
+                     'currency_name', cur.name_ar,
+                     'symbol', cur.symbol,
+                     'current_balance', cbc.current_balance,
+                     'opening_balance', cbc.opening_balance,
+                     'maximum_balance', cbc.maximum_balance,
+                     'is_default', cbc.is_default
+                   )
+                 )
+                 FROM cash_box_currencies cbc
+                 JOIN currencies cur ON cbc.currency_id = cur.id
+                 WHERE cbc.cash_box_id = cb.id
+               ),
+               '[]'::json
+             ) AS currencies
       FROM cash_boxes cb
       LEFT JOIN branches b ON cb.branch_id = b.id
       LEFT JOIN currencies c ON cb.currency_id = c.id
@@ -105,7 +126,27 @@ export const getCashBoxById = async (req: Request, res: Response): Promise<void>
 
     const result = await query(
       `SELECT cb.*,
-              b.name_ar AS branch_name_ar, c.code AS currency_code, gl.code AS gl_account_code, gl.name_ar AS gl_account_name
+              b.name_ar AS branch_name_ar, c.code AS currency_code, gl.code AS gl_account_code, gl.name_ar AS gl_account_name,
+              COALESCE(
+                (
+                  SELECT json_agg(
+                    json_build_object(
+                      'currency_id', cbc.currency_id,
+                      'currency_code', cur.code,
+                      'currency_name', cur.name_ar,
+                      'symbol', cur.symbol,
+                      'current_balance', cbc.current_balance,
+                      'opening_balance', cbc.opening_balance,
+                      'maximum_balance', cbc.maximum_balance,
+                      'is_default', cbc.is_default
+                    )
+                  )
+                  FROM cash_box_currencies cbc
+                  JOIN currencies cur ON cbc.currency_id = cur.id
+                  WHERE cbc.cash_box_id = cb.id
+                ),
+                '[]'::json
+              ) AS currencies
        FROM cash_boxes cb
        LEFT JOIN branches b ON cb.branch_id = b.id
        LEFT JOIN currencies c ON cb.currency_id = c.id
@@ -135,6 +176,8 @@ export const createCashBox = async (req: Request, res: Response): Promise<void> 
       nameEn,
       branchId,
       currencyId,
+      currencyIds,
+      currencies,
       glAccountId,
       responsibleEmployeeId,
       openingBalance = 0,
@@ -143,8 +186,12 @@ export const createCashBox = async (req: Request, res: Response): Promise<void> 
       notes,
     } = req.body;
 
-    if (!code || !nameAr || !branchId || !currencyId || !glAccountId) {
-      errorResponse(res, 'جميع الحقول الأساسية مطلوبة (كود الصندوق، الاسم العربي، الفرع، العملة، الحساب المحاسبي)', 400);
+    const chosenCurrencyIds: string[] = currencyIds && Array.isArray(currencyIds) && currencyIds.length > 0
+      ? currencyIds
+      : (currencyId ? [currencyId] : []);
+
+    if (!code || !nameAr || !branchId || chosenCurrencyIds.length === 0 || !glAccountId) {
+      errorResponse(res, 'جميع الحقول الأساسية مطلوبة (كود الصندوق، الاسم العربي، الفرع، العملات، الحساب المحاسبي)', 400);
       return;
     }
 
@@ -158,6 +205,7 @@ export const createCashBox = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
+    const primaryCurrencyId = chosenCurrencyIds[0];
     const currentBalance = Number(openingBalance) || 0;
 
     const result = await query(
@@ -173,7 +221,7 @@ export const createCashBox = async (req: Request, res: Response): Promise<void> 
         code,
         nameAr,
         nameEn || nameAr,
-        currencyId,
+        primaryCurrencyId,
         glAccountId,
         responsibleEmployeeId || null,
         Number(openingBalance) || 0,
@@ -186,6 +234,35 @@ export const createCashBox = async (req: Request, res: Response): Promise<void> 
     );
 
     const createdBox = result.rows[0];
+
+    // Populate cash_box_currencies
+    if (currencies && Array.isArray(currencies) && currencies.length > 0) {
+      for (let i = 0; i < currencies.length; i++) {
+        const item = currencies[i];
+        const cId = item.currencyId || item.currency_id;
+        if (!cId) continue;
+        const openBal = Number(item.openingBalance || item.opening_balance || 0);
+        const maxBal = Number(item.maximumBalance || item.maximum_balance || 0);
+        await query(
+          `INSERT INTO cash_box_currencies (cash_box_id, currency_id, opening_balance, current_balance, maximum_balance, is_default)
+           VALUES ($1, $2, $3, $3, $4, $5)
+           ON CONFLICT (cash_box_id, currency_id) DO NOTHING`,
+          [createdBox.id, cId, openBal, maxBal, i === 0]
+        );
+      }
+    } else {
+      for (let i = 0; i < chosenCurrencyIds.length; i++) {
+        const cId = chosenCurrencyIds[i];
+        const openBal = (i === 0 && openingBalance !== undefined) ? Number(openingBalance) || 0 : 0;
+        await query(
+          `INSERT INTO cash_box_currencies (cash_box_id, currency_id, opening_balance, current_balance, maximum_balance, is_default)
+           VALUES ($1, $2, $3, $3, $4, $5)
+           ON CONFLICT (cash_box_id, currency_id) DO NOTHING`,
+          [createdBox.id, cId, openBal, Number(maximumBalance) || 0, i === 0]
+        );
+      }
+    }
+
     await logAudit(userId, 'INSERT', 'cash_boxes', createdBox.id, null, createdBox, req, `إنشاء صندوق مالي جديد: ${nameAr} (${code})`);
 
     successResponse(res, createdBox, 'تم إنشاء الصندوق المالي بنجاح', 201);
@@ -209,6 +286,8 @@ export const updateCashBox = async (req: Request, res: Response): Promise<void> 
       nameEn,
       branchId,
       currencyId,
+      currencyIds,
+      currencies,
       glAccountId,
       responsibleEmployeeId,
       openingBalance,
@@ -240,6 +319,12 @@ export const updateCashBox = async (req: Request, res: Response): Promise<void> 
       }
     }
 
+    const chosenCurrencyIds: string[] = currencyIds && Array.isArray(currencyIds) && currencyIds.length > 0
+      ? currencyIds
+      : (currencyId ? [currencyId] : []);
+
+    const primaryCurrencyId = chosenCurrencyIds.length > 0 ? chosenCurrencyIds[0] : null;
+
     const result = await query(
       `UPDATE cash_boxes SET
         code = COALESCE($1, code),
@@ -261,7 +346,7 @@ export const updateCashBox = async (req: Request, res: Response): Promise<void> 
         nameAr,
         nameEn,
         branchId,
-        currencyId,
+        primaryCurrencyId,
         glAccountId,
         responsibleEmployeeId || null,
         openingBalance !== undefined ? Number(openingBalance) : null,
@@ -274,6 +359,37 @@ export const updateCashBox = async (req: Request, res: Response): Promise<void> 
     );
 
     const updatedBox = result.rows[0];
+
+    // Sync cash_box_currencies
+    if (currencies && Array.isArray(currencies) && currencies.length > 0) {
+      for (let i = 0; i < currencies.length; i++) {
+        const item = currencies[i];
+        const cId = item.currencyId || item.currency_id;
+        if (!cId) continue;
+        const maxBal = Number(item.maximumBalance || item.maximum_balance || 0);
+        await query(
+          `INSERT INTO cash_box_currencies (cash_box_id, currency_id, opening_balance, current_balance, maximum_balance, is_default)
+           VALUES ($1, $2, 0, 0, $3, $4)
+           ON CONFLICT (cash_box_id, currency_id) DO UPDATE SET is_default = $4, maximum_balance = $3`,
+          [id, cId, maxBal, i === 0]
+        );
+      }
+    } else if (chosenCurrencyIds.length > 0) {
+      for (let i = 0; i < chosenCurrencyIds.length; i++) {
+        const cId = chosenCurrencyIds[i];
+        await query(
+          `INSERT INTO cash_box_currencies (cash_box_id, currency_id, opening_balance, current_balance, maximum_balance, is_default)
+           VALUES ($1, $2, 0, 0, $3, $4)
+           ON CONFLICT (cash_box_id, currency_id) DO UPDATE SET is_default = $4`,
+          [id, cId, Number(maximumBalance) || 0, i === 0]
+        );
+      }
+      await query(
+        `DELETE FROM cash_box_currencies WHERE cash_box_id = $1 AND currency_id != ALL($2) AND current_balance = 0`,
+        [id, chosenCurrencyIds]
+      );
+    }
+
     await logAudit(userId, 'UPDATE', 'cash_boxes', updatedBox.id, oldValues, updatedBox, req, `تحديث بيانات الصندوق المالي: ${updatedBox.name_ar}`);
 
     successResponse(res, updatedBox, 'تم تحديث بيانات الصندوق بنجاح');
@@ -336,7 +452,26 @@ export const getBankAccounts = async (req: Request, res: Response): Promise<void
       SELECT ba.*,
              b.name_ar AS branch_name_ar, b.name_en AS branch_name_en,
              c.code AS currency_code, c.name_ar AS currency_name, c.symbol AS currency_symbol,
-             gl.code AS gl_account_code, gl.name_ar AS gl_account_name
+             gl.code AS gl_account_code, gl.name_ar AS gl_account_name,
+             COALESCE(
+               (
+                 SELECT json_agg(
+                   json_build_object(
+                     'currency_id', bac.currency_id,
+                     'currency_code', cur.code,
+                     'currency_name', cur.name_ar,
+                     'symbol', cur.symbol,
+                     'current_balance', bac.current_balance,
+                     'opening_balance', bac.opening_balance,
+                     'is_default', bac.is_default
+                   )
+                 )
+                 FROM bank_account_currencies bac
+                 JOIN currencies cur ON bac.currency_id = cur.id
+                 WHERE bac.bank_account_id = ba.id
+               ),
+               '[]'::json
+             ) AS currencies
       FROM bank_accounts ba
       LEFT JOIN branches b ON ba.branch_id = b.id
       LEFT JOIN currencies c ON ba.currency_id = c.id
@@ -388,7 +523,26 @@ export const getBankAccountById = async (req: Request, res: Response): Promise<v
 
     const result = await query(
       `SELECT ba.*,
-              b.name_ar AS branch_name_ar, c.code AS currency_code, gl.code AS gl_account_code, gl.name_ar AS gl_account_name
+              b.name_ar AS branch_name_ar, c.code AS currency_code, gl.code AS gl_account_code, gl.name_ar AS gl_account_name,
+              COALESCE(
+                (
+                  SELECT json_agg(
+                    json_build_object(
+                      'currency_id', bac.currency_id,
+                      'currency_code', cur.code,
+                      'currency_name', cur.name_ar,
+                      'symbol', cur.symbol,
+                      'current_balance', bac.current_balance,
+                      'opening_balance', bac.opening_balance,
+                      'is_default', bac.is_default
+                    )
+                  )
+                  FROM bank_account_currencies bac
+                  JOIN currencies cur ON bac.currency_id = cur.id
+                  WHERE bac.bank_account_id = ba.id
+                ),
+                '[]'::json
+              ) AS currencies
        FROM bank_accounts ba
        LEFT JOIN branches b ON ba.branch_id = b.id
        LEFT JOIN currencies c ON ba.currency_id = c.id
@@ -418,6 +572,7 @@ export const createBankAccount = async (req: Request, res: Response): Promise<vo
       nameEn,
       branchId,
       currencyId,
+      currencyIds,
       glAccountId,
       accountNumber,
       iban,
@@ -430,7 +585,11 @@ export const createBankAccount = async (req: Request, res: Response): Promise<vo
       notes,
     } = req.body;
 
-    if (!code || !nameAr || !branchId || !currencyId || !glAccountId || !accountNumber) {
+    const chosenCurrencyIds: string[] = currencyIds && Array.isArray(currencyIds) && currencyIds.length > 0
+      ? currencyIds
+      : (currencyId ? [currencyId] : []);
+
+    if (!code || !nameAr || !branchId || chosenCurrencyIds.length === 0 || !glAccountId || !accountNumber) {
       errorResponse(res, 'جميع الحقول الأساسية مطلوبة (كود البنك، اسم البنك العربي، الفرع، العملة، الحساب المحاسبي، رقم الحساب)', 400);
       return;
     }
@@ -453,6 +612,7 @@ export const createBankAccount = async (req: Request, res: Response): Promise<vo
       return;
     }
 
+    const primaryCurrencyId = chosenCurrencyIds[0];
     const currentBalance = Number(openingBalance) || 0;
 
     const result = await query(
@@ -468,7 +628,7 @@ export const createBankAccount = async (req: Request, res: Response): Promise<vo
         code,
         nameAr,
         nameEn || nameAr,
-        currencyId,
+        primaryCurrencyId,
         glAccountId,
         accountNumber,
         iban || null,
@@ -485,6 +645,19 @@ export const createBankAccount = async (req: Request, res: Response): Promise<vo
     );
 
     const createdBank = result.rows[0];
+
+    // Populate bank_account_currencies
+    for (let i = 0; i < chosenCurrencyIds.length; i++) {
+      const cId = chosenCurrencyIds[i];
+      const openBal = (i === 0 && openingBalance !== undefined) ? Number(openingBalance) || 0 : 0;
+      await query(
+        `INSERT INTO bank_account_currencies (bank_account_id, currency_id, opening_balance, current_balance, is_default)
+         VALUES ($1, $2, $3, $3, $4)
+         ON CONFLICT (bank_account_id, currency_id) DO NOTHING`,
+        [createdBank.id, cId, openBal, i === 0]
+      );
+    }
+
     await logAudit(userId, 'INSERT', 'bank_accounts', createdBank.id, null, createdBank, req, `إنشاء حساب بنكي جديد: ${nameAr} (${accountNumber})`);
 
     successResponse(res, createdBank, 'تم إضافة الحساب البنكي بنجاح', 201);
@@ -508,6 +681,7 @@ export const updateBankAccount = async (req: Request, res: Response): Promise<vo
       nameEn,
       branchId,
       currencyId,
+      currencyIds,
       glAccountId,
       accountNumber,
       iban,
@@ -554,6 +728,12 @@ export const updateBankAccount = async (req: Request, res: Response): Promise<vo
       }
     }
 
+    const chosenCurrencyIds: string[] = currencyIds && Array.isArray(currencyIds) && currencyIds.length > 0
+      ? currencyIds
+      : (currencyId ? [currencyId] : []);
+
+    const primaryCurrencyId = chosenCurrencyIds.length > 0 ? chosenCurrencyIds[0] : null;
+
     const result = await query(
       `UPDATE bank_accounts SET
         code = COALESCE($1, code),
@@ -579,7 +759,7 @@ export const updateBankAccount = async (req: Request, res: Response): Promise<vo
         nameAr,
         nameEn,
         branchId,
-        currencyId,
+        primaryCurrencyId,
         glAccountId,
         accountNumber,
         iban,
@@ -596,6 +776,24 @@ export const updateBankAccount = async (req: Request, res: Response): Promise<vo
     );
 
     const updatedBank = result.rows[0];
+
+    // Sync bank_account_currencies
+    if (chosenCurrencyIds.length > 0) {
+      for (let i = 0; i < chosenCurrencyIds.length; i++) {
+        const cId = chosenCurrencyIds[i];
+        await query(
+          `INSERT INTO bank_account_currencies (bank_account_id, currency_id, opening_balance, current_balance, is_default)
+           VALUES ($1, $2, 0, 0, $3)
+           ON CONFLICT (bank_account_id, currency_id) DO UPDATE SET is_default = $3`,
+          [id, cId, i === 0]
+        );
+      }
+      await query(
+        `DELETE FROM bank_account_currencies WHERE bank_account_id = $1 AND currency_id != ALL($2) AND current_balance = 0`,
+        [id, chosenCurrencyIds]
+      );
+    }
+
     await logAudit(userId, 'UPDATE', 'bank_accounts', updatedBank.id, oldValues, updatedBank, req, `تحديث بيانات الحساب البنكي: ${updatedBank.name_ar}`);
 
     successResponse(res, updatedBank, 'تم تحديث بيانات الحساب البنكي بنجاح');
@@ -639,5 +837,230 @@ export const deleteBankAccount = async (req: Request, res: Response): Promise<vo
     successResponse(res, null, 'تم حذف الحساب البنكي بنجاح');
   } catch (error: any) {
     errorResponse(res, 'خطأ في حذف الحساب البنكي', 500, error.message);
+  }
+};
+
+// ==========================================
+// CURRENCY TRANSFERS & EXCHANGE
+// ==========================================
+
+export const getCurrencyTransfers = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const companyId = req.user!.companyId;
+    const result = await query(
+      `SELECT ct.*,
+              sc.code AS source_currency_code, sc.name_ar AS source_currency_name, sc.symbol AS source_currency_symbol,
+              tc.code AS target_currency_code, tc.name_ar AS target_currency_name, tc.symbol AS target_currency_symbol,
+              scb.name_ar AS source_cash_box_name, tcb.name_ar AS target_cash_box_name,
+              sba.name_ar AS source_bank_account_name, tba.name_ar AS target_bank_account_name
+       FROM currency_transfers ct
+       JOIN currencies sc ON ct.source_currency_id = sc.id
+       JOIN currencies tc ON ct.target_currency_id = tc.id
+       LEFT JOIN cash_boxes scb ON ct.source_cash_box_id = scb.id
+       LEFT JOIN cash_boxes tcb ON ct.target_cash_box_id = tcb.id
+       LEFT JOIN bank_accounts sba ON ct.source_bank_account_id = sba.id
+       LEFT JOIN bank_accounts tba ON ct.target_bank_account_id = tba.id
+       WHERE ct.company_id = $1
+       ORDER BY ct.transfer_date DESC, ct.created_at DESC`,
+      [companyId]
+    );
+    successResponse(res, result.rows);
+  } catch (error: any) {
+    errorResponse(res, 'خطأ في جلب عمليات تحويل وصرف العملة', 500, error.message);
+  }
+};
+
+export const createCurrencyTransfer = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const companyId = req.user!.companyId;
+    const userId = req.user!.userId;
+    const branchId = req.user!.branchId;
+
+    const {
+      transferDate,
+      sourceCashBoxId,
+      sourceBankAccountId,
+      sourceCurrencyId,
+      sourceAmount,
+      targetCashBoxId,
+      targetBankAccountId,
+      targetCurrencyId,
+      targetAmount,
+      exchangeRate,
+      differenceAmount = 0,
+      notes,
+    } = req.body;
+
+    if (!transferDate || !sourceCurrencyId || !targetCurrencyId || Number(sourceAmount) <= 0 || Number(targetAmount) <= 0 || Number(exchangeRate) <= 0) {
+      errorResponse(res, 'تاريخ التحويل والعملات والمبالغ وسعر الصرف مطلوبة وقيمها أكبر من صفر', 400);
+      return;
+    }
+
+    if (!sourceCashBoxId && !sourceBankAccountId) {
+      errorResponse(res, 'يجب تحديد الصندوق أو الحساب البنكي المصدر', 400);
+      return;
+    }
+    if (!targetCashBoxId && !targetBankAccountId) {
+      errorResponse(res, 'يجب تحديد الصندوق أو الحساب البنكي المستلم', 400);
+      return;
+    }
+
+    await transaction(async (client) => {
+      // 1. Verify available balance in source currency
+      if (sourceCashBoxId) {
+        const balRes = await client.query(
+          `SELECT current_balance FROM cash_box_currencies WHERE cash_box_id = $1 AND currency_id = $2 FOR UPDATE`,
+          [sourceCashBoxId, sourceCurrencyId]
+        );
+        const currBal = balRes.rows.length > 0 ? Number(balRes.rows[0].current_balance) : 0;
+        if (currBal < Number(sourceAmount)) {
+          const curRes = await client.query(`SELECT code FROM currencies WHERE id = $1`, [sourceCurrencyId]);
+          const curCode = curRes.rows[0]?.code || '';
+          throw new Error(`رصيد الـ ${curCode} غير كافٍ في الصندوق المصدر. الرصيد المتوفر: ${currBal} ${curCode}، المطلوب تحويله: ${sourceAmount} ${curCode}`);
+        }
+        // Deduct from source cash box
+        await client.query(
+          `UPDATE cash_box_currencies SET current_balance = current_balance - $1 WHERE cash_box_id = $2 AND currency_id = $3`,
+          [sourceAmount, sourceCashBoxId, sourceCurrencyId]
+        );
+      } else if (sourceBankAccountId) {
+        const balRes = await client.query(
+          `SELECT current_balance FROM bank_account_currencies WHERE bank_account_id = $1 AND currency_id = $2 FOR UPDATE`,
+          [sourceBankAccountId, sourceCurrencyId]
+        );
+        const currBal = balRes.rows.length > 0 ? Number(balRes.rows[0].current_balance) : 0;
+        if (currBal < Number(sourceAmount)) {
+          const curRes = await client.query(`SELECT code FROM currencies WHERE id = $1`, [sourceCurrencyId]);
+          const curCode = curRes.rows[0]?.code || '';
+          throw new Error(`رصيد الـ ${curCode} غير كافٍ في الحساب البنكي المصدر. الرصيد المتوفر: ${currBal} ${curCode}`);
+        }
+        await client.query(
+          `UPDATE bank_account_currencies SET current_balance = current_balance - $1 WHERE bank_account_id = $2 AND currency_id = $3`,
+          [sourceAmount, sourceBankAccountId, sourceCurrencyId]
+        );
+      }
+
+      // 2. Add to target cash box / bank account in target currency
+      if (targetCashBoxId) {
+        await client.query(
+          `INSERT INTO cash_box_currencies (cash_box_id, currency_id, current_balance, opening_balance, is_default)
+           VALUES ($1, $2, $3, 0, FALSE)
+           ON CONFLICT (cash_box_id, currency_id)
+           DO UPDATE SET current_balance = cash_box_currencies.current_balance + $3`,
+          [targetCashBoxId, targetCurrencyId, targetAmount]
+        );
+      } else if (targetBankAccountId) {
+        await client.query(
+          `INSERT INTO bank_account_currencies (bank_account_id, currency_id, current_balance, opening_balance, is_default)
+           VALUES ($1, $2, $3, 0, FALSE)
+           ON CONFLICT (bank_account_id, currency_id)
+           DO UPDATE SET current_balance = bank_account_currencies.current_balance + $3`,
+          [targetBankAccountId, targetCurrencyId, targetAmount]
+        );
+      }
+
+      // 3. Generate Double-entry Journal Entry
+      const transferNumber = `FX-${Date.now()}`;
+      const jeNumber = `JE-FX-${Date.now()}`;
+
+      // Get GL accounts
+      let sourceGlAccountId: string | null = null;
+      let targetGlAccountId: string | null = null;
+
+      if (sourceCashBoxId) {
+        const r = await client.query(`SELECT gl_account_id FROM cash_boxes WHERE id = $1`, [sourceCashBoxId]);
+        sourceGlAccountId = r.rows[0]?.gl_account_id;
+      } else if (sourceBankAccountId) {
+        const r = await client.query(`SELECT gl_account_id FROM bank_accounts WHERE id = $1`, [sourceBankAccountId]);
+        sourceGlAccountId = r.rows[0]?.gl_account_id;
+      }
+
+      if (targetCashBoxId) {
+        const r = await client.query(`SELECT gl_account_id FROM cash_boxes WHERE id = $1`, [targetCashBoxId]);
+        targetGlAccountId = r.rows[0]?.gl_account_id;
+      } else if (targetBankAccountId) {
+        const r = await client.query(`SELECT gl_account_id FROM bank_accounts WHERE id = $1`, [targetBankAccountId]);
+        targetGlAccountId = r.rows[0]?.gl_account_id;
+      }
+
+      // Determine Base valuation
+      const sCur = await client.query(`SELECT code, is_default FROM currencies WHERE id = $1`, [sourceCurrencyId]);
+      const tCur = await client.query(`SELECT code, is_default FROM currencies WHERE id = $1`, [targetCurrencyId]);
+      
+      const sIsDef = sCur.rows[0]?.is_default;
+      const tIsDef = tCur.rows[0]?.is_default;
+      
+      // Calculate base amounts
+      let baseValuation = Number(sourceAmount);
+      if (!sIsDef && tIsDef) {
+        baseValuation = Number(targetAmount);
+      } else if (!sIsDef && !tIsDef) {
+        baseValuation = Number(sourceAmount) * Number(exchangeRate);
+      }
+
+      const jeRes = await client.query(
+        `INSERT INTO journal_entries (
+          entry_number, entry_date, description, reference_no, reference_type, branch_id,
+          currency_id, exchange_rate, total_debit, total_credit, created_by, status, posted_at
+        ) VALUES ($1,$2,$3,$4,'CurrencyTransfer',$5,$6,$7,$8,$8,$9,'Posted',NOW()) RETURNING id`,
+        [
+          jeNumber,
+          transferDate,
+          notes || `صرف وتحويل عملة: ${sourceAmount} ${sCur.rows[0]?.code} إلى ${targetAmount} ${tCur.rows[0]?.code}`,
+          transferNumber,
+          branchId,
+          targetCurrencyId,
+          exchangeRate,
+          baseValuation,
+          userId,
+        ]
+      );
+      const jeId = jeRes.rows[0].id;
+
+      // Debit: Target (Receiving Account)
+      if (targetGlAccountId) {
+        await client.query(
+          `INSERT INTO journal_entry_lines (journal_entry_id, gl_account_id, cash_box_id, bank_account_id, debit, credit, debit_base, credit_base, line_description, sort_order)
+           VALUES ($1,$2,$3,$4,$5,0,$6,0,$7,0)`,
+          [
+            jeId, targetGlAccountId, targetCashBoxId || null, targetBankAccountId || null,
+            Number(targetAmount), baseValuation, `استلام عملة محولة: ${targetAmount} ${tCur.rows[0]?.code}`
+          ]
+        );
+      }
+
+      // Credit: Source (Sending Account)
+      if (sourceGlAccountId) {
+        await client.query(
+          `INSERT INTO journal_entry_lines (journal_entry_id, gl_account_id, cash_box_id, bank_account_id, debit, credit, debit_base, credit_base, line_description, sort_order)
+           VALUES ($1,$2,$3,$4,0,$5,0,$6,$7,1)`,
+          [
+            jeId, sourceGlAccountId, sourceCashBoxId || null, sourceBankAccountId || null,
+            Number(sourceAmount), baseValuation, `صرف عملة للتحويل: ${sourceAmount} ${sCur.rows[0]?.code}`
+          ]
+        );
+      }
+
+      // 4. Record Transfer
+      const transferRes = await client.query(
+        `INSERT INTO currency_transfers (
+          company_id, branch_id, transfer_number, transfer_date,
+          source_cash_box_id, source_bank_account_id, source_currency_id, source_amount,
+          target_cash_box_id, target_bank_account_id, target_currency_id, target_amount,
+          exchange_rate, difference_amount, notes, status, journal_entry_id, created_by
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'Posted',$16,$17)
+        RETURNING *`,
+        [
+          companyId, branchId, transferNumber, transferDate,
+          sourceCashBoxId || null, sourceBankAccountId || null, sourceCurrencyId, Number(sourceAmount),
+          targetCashBoxId || null, targetBankAccountId || null, targetCurrencyId, Number(targetAmount),
+          Number(exchangeRate), Number(differenceAmount) || 0, notes || null, jeId, userId
+        ]
+      );
+
+      successResponse(res, transferRes.rows[0], 'تم تنفيذ عملية تحويل وصرف العملة بنجاح وتحديث الأرصدة والقيود المحاسبية', 201);
+    });
+  } catch (error: any) {
+    errorResponse(res, error.message || 'خطأ في تنفيذ عملية تحويل وصرف العملة', 500);
   }
 };

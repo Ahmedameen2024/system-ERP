@@ -9,4 +9,6 @@ export declare const getBankAccountById: (req: Request, res: Response) => Promis
 export declare const createBankAccount: (req: Request, res: Response) => Promise<void>;
 export declare const updateBankAccount: (req: Request, res: Response) => Promise<void>;
 export declare const deleteBankAccount: (req: Request, res: Response) => Promise<void>;
+export declare const getCurrencyTransfers: (req: Request, res: Response) => Promise<void>;
+export declare const createCurrencyTransfer: (req: Request, res: Response) => Promise<void>;
 //# sourceMappingURL=cashBanksController.d.ts.map

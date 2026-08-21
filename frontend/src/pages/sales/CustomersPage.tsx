@@ -3,6 +3,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../api/client';
 
+interface CustomerCurrency {
+  currency_id: string;
+  currency_code: string;
+  currency_name: string;
+  symbol?: string;
+  balance: number | string;
+  opening_balance: number | string;
+  credit_limit: number | string | null;
+  is_default: boolean;
+}
+
 interface Customer {
   id: string;
   code: string;
@@ -18,9 +29,18 @@ interface Customer {
   credit_limit: string;
   opening_balance: string;
   balance: string;
+  currency_id?: string;
+  currencies?: CustomerCurrency[];
   payment_terms: number;
   ar_account_id: string | null;
   status: 'Active' | 'Inactive';
+}
+
+interface CurrencyOption {
+  id: string;
+  code: string;
+  name_ar: string;
+  symbol: string;
 }
 
 interface GLAccount { id: string; code: string; name_ar: string; account_type: string; }
@@ -29,6 +49,7 @@ const EMPTY_FORM = {
   code: '', nameAr: '', nameEn: '', tradeName: '', phone: '', email: '',
   city: '', address: '', taxNumber: '', crNumber: '',
   creditLimit: 0, openingBalance: 0, paymentTerms: 30,
+  currencyIds: [] as string[],
   arAccountId: '', status: 'Active' as 'Active' | 'Inactive'
 };
 
@@ -45,6 +66,14 @@ export default function CustomersPage() {
     queryFn: async () => {
       const r = await api.get('/sales/customers');
       return (r.data.data || []) as Customer[];
+    },
+  });
+
+  const { data: currencies = [] } = useQuery({
+    queryKey: ['currencies-lookup'],
+    queryFn: async () => {
+      const r = await api.get('/setup/currencies');
+      return (r.data.data || []) as CurrencyOption[];
     },
   });
 
@@ -111,29 +140,52 @@ export default function CustomersPage() {
 
   const openAdd = () => {
     setEditItem(null);
-    setForm({ ...EMPTY_FORM });
+    const defaultCurIds = currencies.length > 0 ? [currencies[0].id] : [];
+    setForm({ ...EMPTY_FORM, currencyIds: defaultCurIds });
     setActiveTab('basic');
     setShowModal(true);
   };
 
   const openEdit = (c: Customer) => {
     setEditItem(c);
+    const assignedCurIds = (c.currencies && c.currencies.length > 0)
+      ? c.currencies.map(cur => cur.currency_id)
+      : (c.currency_id ? [c.currency_id] : (currencies.length > 0 ? [currencies[0].id] : []));
+
     setForm({
       code: c.code, nameAr: c.name_ar, nameEn: c.name_en, tradeName: c.trade_name || '',
       phone: c.phone || '', email: c.email || '', city: c.city || '',
       address: c.address || '', taxNumber: c.tax_number || '', crNumber: c.cr_number || '',
       creditLimit: Number(c.credit_limit) || 0, openingBalance: Number(c.opening_balance) || 0,
-      paymentTerms: c.payment_terms || 30, arAccountId: c.ar_account_id || '',
+      paymentTerms: c.payment_terms || 30, currencyIds: assignedCurIds,
+      arAccountId: c.ar_account_id || '',
       status: c.status
     });
     setActiveTab('basic');
     setShowModal(true);
   };
 
+  const toggleCurrency = (curId: string) => {
+    setForm(prev => {
+      const exists = prev.currencyIds.includes(curId);
+      if (exists) {
+        if (prev.currencyIds.length === 1) return prev; // Keep at least one
+        return { ...prev, currencyIds: prev.currencyIds.filter(id => id !== curId) };
+      } else {
+        return { ...prev, currencyIds: [...prev.currencyIds, curId] };
+      }
+    });
+  };
+
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>دليل العملاء</h1>
+        <div>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>دليل العملاء</h1>
+          <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: '0.25rem 0 0' }}>
+            إدارة العملاء والعملات المسموح بها والأرصدة المستقلة
+          </p>
+        </div>
         <button className="btn btn-primary btn-sm" onClick={openAdd}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>person_add</span>
           إضافة عميل جديد
@@ -153,24 +205,24 @@ export default function CustomersPage() {
         </div>
         <div className="card" style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ width: 40, height: 40, borderRadius: '10px', background: 'rgba(234,179,8,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span className="material-symbols-outlined" style={{ color: '#ca8a04' }}>account_balance_wallet</span>
+            <span className="material-symbols-outlined" style={{ color: '#ca8a04' }}>payments</span>
           </div>
           <div>
-            <div className="numeric" style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ca8a04' }}>
-              {customers.reduce((s, c) => s + Number(c.balance), 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}
+            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#ca8a04' }}>
+              تعدد العملات المستقلة
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-on-surface-variant)' }}>إجمالي المستحقات</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-on-surface-variant)' }}>أرصدة منفصلة لكل عملة</div>
           </div>
         </div>
         <div className="card" style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ width: 40, height: 40, borderRadius: '10px', background: 'rgba(22,163,74,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span className="material-symbols-outlined" style={{ color: '#16a34a' }}>credit_score</span>
+            <span className="material-symbols-outlined" style={{ color: '#16a34a' }}>currency_exchange</span>
           </div>
           <div>
             <div className="numeric" style={{ fontSize: '1.25rem', fontWeight: 800, color: '#16a34a' }}>
-              {customers.reduce((s, c) => s + Number(c.credit_limit), 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}
+              {currencies.length} عملات مسجلة
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--color-on-surface-variant)' }}>إجمالي الحدود الائتمانية</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-on-surface-variant)' }}>دعم كامل للصرف والتحويل</div>
           </div>
         </div>
       </div>
@@ -191,10 +243,10 @@ export default function CustomersPage() {
                 <th>الاسم</th>
                 <th>المدينة</th>
                 <th>الهاتف</th>
-                <th>الرقم الضريبي</th>
+                <th>العملات المسموحة</th>
                 <th>أيام السداد</th>
                 <th style={{ textAlign: 'left' }}>الحد الائتماني</th>
-                <th style={{ textAlign: 'left' }}>الرصيد المستحق</th>
+                <th style={{ textAlign: 'left' }}>الأرصدة المستقلة بالعملات</th>
                 <th>الحالة</th>
                 <th>إجراءات</th>
               </tr>
@@ -211,18 +263,47 @@ export default function CustomersPage() {
                   </td>
                   <td>{c.city || '—'}</td>
                   <td className="numeric">{c.phone || '—'}</td>
-                  <td className="numeric" style={{ fontSize: '0.75rem' }}>{c.tax_number || '—'}</td>
+                  <td>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                      {c.currencies && c.currencies.length > 0 ? (
+                        c.currencies.map(cur => (
+                          <span key={cur.currency_id} className="chip chip-primary" style={{ fontSize: '0.7rem', padding: '0.1rem 0.45rem' }}>
+                            {cur.currency_code}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="chip chip-neutral" style={{ fontSize: '0.7rem' }}>SAR</span>
+                      )}
+                    </div>
+                  </td>
                   <td style={{ textAlign: 'center' }}>{c.payment_terms} يوم</td>
                   <td className="numeric" style={{ textAlign: 'left' }}>{Number(c.credit_limit).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                  <td className="numeric" style={{ textAlign: 'left', fontWeight: 700, color: Number(c.balance) > 0 ? '#ca8a04' : 'inherit' }}>
-                    {Number(c.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  <td style={{ textAlign: 'left' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                      {c.currencies && c.currencies.length > 0 ? (
+                        c.currencies.map(cur => {
+                          const balNum = Number(cur.balance) || 0;
+                          return (
+                            <div key={cur.currency_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.8rem' }}>
+                              <span style={{ fontWeight: 700, color: 'var(--color-text-muted)' }}>{cur.currency_code}:</span>
+                              <span className="numeric" style={{ fontWeight: 700, color: balNum > 0 ? '#ca8a04' : balNum < 0 ? '#16a34a' : 'inherit' }}>
+                                {balNum.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <span className="numeric" style={{ fontWeight: 700, color: Number(c.balance) > 0 ? '#ca8a04' : 'inherit' }}>
+                          {Number(c.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td><span className={`chip ${c.status === 'Active' ? 'chip-success' : 'chip-neutral'}`}>{c.status === 'Active' ? 'نشط' : 'متوقف'}</span></td>
                   <td>
                     <button className="btn btn-ghost btn-sm" onClick={() => openEdit(c)} title="تعديل">
                       <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
                     </button>
-                    {/** show delete if user has permission or if no permission model available (backend enforces) */}
                     {(auth.hasPermission?.('Sales', 'Customers', 'delete') ?? true) && (
                       <button
                         className="btn btn-ghost btn-sm"
@@ -255,7 +336,7 @@ export default function CustomersPage() {
               {(['basic', 'financial'] as const).map(tab => (
                 <button key={tab} type="button" className={`btn btn-sm ${activeTab === tab ? 'btn-primary' : 'btn-ghost'}`}
                   style={{ borderRadius: '0.5rem 0.5rem 0 0' }} onClick={() => setActiveTab(tab)}>
-                  {tab === 'basic' ? 'البيانات الأساسية' : 'الإعدادات المالية'}
+                  {tab === 'basic' ? 'البيانات الأساسية' : 'الإعدادات المالية والعملات'}
                 </button>
               ))}
             </div>
@@ -314,21 +395,67 @@ export default function CustomersPage() {
               )}
 
               {activeTab === 'financial' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label>الحد الائتماني (ر.س)</label>
-                    <input className="input numeric" type="number" step="0.01" value={form.creditLimit} onChange={e => setForm({ ...form, creditLimit: parseFloat(e.target.value) || 0 })} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  {/* Multi-Currency Selection */}
+                  <div style={{ padding: '1rem', background: 'var(--color-surface-variant)', borderRadius: '0.75rem', border: '1px solid var(--color-outline-variant)' }}>
+                    <label style={{ fontWeight: 700, marginBottom: '0.5rem', display: 'block' }}>
+                      العملات التي يتعامل بها العميل (تعدد العملات) *
+                    </label>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '0 0 0.75rem' }}>
+                      حدد جميع العملات المسموح بها في فواتير وسندات هذا العميل. لكل عملة رصيد مستقل تماماً.
+                    </p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.5rem' }}>
+                      {currencies.map(cur => {
+                        const isSelected = form.currencyIds.includes(cur.id);
+                        return (
+                          <button
+                            key={cur.id}
+                            type="button"
+                            onClick={() => toggleCurrency(cur.id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '0.5rem 0.75rem',
+                              borderRadius: '0.5rem',
+                              border: `2px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-outline-variant)'}`,
+                              background: isSelected ? 'var(--color-primary-container)' : 'var(--color-surface)',
+                              color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                              fontWeight: isSelected ? 700 : 500,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            <span>{cur.code} - {cur.name_ar}</span>
+                            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                              {isSelected ? 'check_box' : 'check_box_outline_blank'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div>
-                    <label>شروط الدفع (أيام)</label>
-                    <input className="input numeric" type="number" value={form.paymentTerms} onChange={e => setForm({ ...form, paymentTerms: parseInt(e.target.value) || 30 })} />
-                  </div>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label>حساب المدينين (AR Account)</label>
-                    <select className="input" value={form.arAccountId} onChange={e => setForm({ ...form, arAccountId: e.target.value })}>
-                      <option value="">-- اختر الحساب --</option>
-                      {receivableAccounts.map(a => <option key={a.id} value={a.id}>{a.code} - {a.name_ar}</option>)}
-                    </select>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label>الحد الائتماني</label>
+                      <input className="input numeric" type="number" step="0.01" value={form.creditLimit} onChange={e => setForm({ ...form, creditLimit: parseFloat(e.target.value) || 0 })} />
+                    </div>
+                    <div>
+                      <label>شروط الدفع (أيام)</label>
+                      <input className="input numeric" type="number" value={form.paymentTerms} onChange={e => setForm({ ...form, paymentTerms: parseInt(e.target.value) || 30 })} />
+                    </div>
+                    <div>
+                      <label>الرصيد الافتتاحي (للعملة الأساسية)</label>
+                      <input className="input numeric" type="number" step="0.01" value={form.openingBalance} onChange={e => setForm({ ...form, openingBalance: parseFloat(e.target.value) || 0 })} disabled={!!editItem} />
+                    </div>
+                    <div>
+                      <label>حساب المدينين (AR Account)</label>
+                      <select className="input" value={form.arAccountId} onChange={e => setForm({ ...form, arAccountId: e.target.value })}>
+                        <option value="">-- اختر الحساب --</option>
+                        {receivableAccounts.map(a => <option key={a.id} value={a.id}>{a.code} - {a.name_ar}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}
@@ -353,3 +480,4 @@ export default function CustomersPage() {
     </div>
   );
 }
+

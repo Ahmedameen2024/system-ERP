@@ -48,6 +48,8 @@ router.get('/customers/:customerId/statement', (0, auth_1.authorize)('sales', 'c
 router.get('/invoices', (0, auth_1.authorize)('sales', 'sales_invoices', 'view'), sales.getSalesInvoices);
 router.get('/invoices/:id', (0, auth_1.authorize)('sales', 'sales_invoices', 'view'), sales.getSalesInvoiceById);
 router.post('/invoices', (0, auth_1.authorize)('sales', 'sales_invoices', 'create'), sales.createSalesInvoice);
+router.put('/invoices/:id', (0, auth_1.authorize)('sales', 'sales_invoices', 'edit'), sales.updateSalesInvoice);
+router.delete('/invoices/:id', (0, auth_1.authorize)('sales', 'sales_invoices', 'delete'), sales.deleteSalesInvoice);
 router.post('/invoices/:id/post', (0, auth_1.authorize)('sales', 'sales_invoices', 'approve'), sales.postSalesInvoice);
 router.post('/invoices/:id/void', (0, auth_1.authorize)('sales', 'sales_invoices', 'approve'), sales.voidSalesInvoice);
 // Sales Returns

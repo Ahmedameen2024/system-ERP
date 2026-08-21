@@ -4,7 +4,7 @@ const path = require('path');
 if (!process.env.VERCEL) {
   try {
     require('dotenv').config({ path: path.join(__dirname, '../../backend/.env') });
-  } catch (e) {}
+  } catch (e) { }
 }
 
 let app;

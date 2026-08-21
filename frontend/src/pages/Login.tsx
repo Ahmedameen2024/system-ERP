@@ -41,6 +41,9 @@ export default function Login() {
       <header className="eq-header">
         <div className="eq-header-container">
           <div className="eq-brand">
+            <div className="eq-brand-icon">
+              <span className="material-symbols-outlined" style={{ fontSize: 24, color: '#ffffff' }}>hub</span>
+            </div>
             <span className="eq-brand-title">نظام إدارة الموارد المؤسسية</span>
           </div>
 
@@ -57,7 +60,8 @@ export default function Login() {
           </nav>
 
           <button type="button" onClick={() => scrollToSection('login-card-anchor')} className="eq-btn-header-login">
-            تسجيل الدخول
+            <span className="material-symbols-outlined eq-btn-icon-mobile" style={{ fontSize: 18 }}>login</span>
+            <span>تسجيل الدخول</span>
           </button>
         </div>
       </header>
@@ -67,6 +71,10 @@ export default function Login() {
         <div className="eq-hero-container">
           {/* Hero Left / Right in RTL: Text Side */}
           <div className="eq-hero-content">
+            <div className="eq-hero-badge">
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>verified</span>
+              <span>الجيل الأحدث من أنظمة الـ ERP الذكية</span>
+            </div>
             <h1 className="eq-hero-heading">
               مرحباً بكم في <span className="eq-highlight">نظام إدارة الموارد المؤسسية</span>
             </h1>
@@ -78,8 +86,8 @@ export default function Login() {
               <button type="button" onClick={() => scrollToSection('modules-section')} className="eq-btn-primary">
                 استكشف الخدمات <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_downward</span>
               </button>
-              <button type="button" onClick={() => scrollToSection('about-section')} className="eq-btn-secondary">
-                طلب عرض تجريبي
+              <button type="button" onClick={() => scrollToSection('login-card-anchor')} className="eq-btn-secondary">
+                تسجيل الدخول السريع
               </button>
             </div>
           </div>
@@ -89,7 +97,7 @@ export default function Login() {
             <div className="eq-login-card">
               <div className="eq-card-header">
                 <div className="eq-avatar-icon">
-                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: '#ffffff' }}>login</span>
+                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: '#ffffff' }}>lock_open</span>
                 </div>
                 <h2 className="eq-card-title">تسجيل الدخول للنظام</h2>
                 <p className="eq-card-subtitle">أدخل بيانات الاعتماد الخاصة بك للوصول</p>
@@ -102,7 +110,7 @@ export default function Login() {
                     <input
                       id="username"
                       type="text"
-                      placeholder="أدخل البريد الإلكتروني"
+                      placeholder="أدخل البريد الإلكتروني أو اسم المستخدم"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       autoComplete="username"
@@ -131,7 +139,7 @@ export default function Login() {
                       aria-label="إظهار/إخفاء كلمة المرور"
                     >
                       <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#94a3b8' }}>
-                        {showPass ? 'visibility_off' : 'lock'}
+                        {showPass ? 'visibility_off' : 'visibility'}
                       </span>
                     </button>
                   </div>
@@ -162,18 +170,21 @@ export default function Login() {
                   {loading ? (
                     <>
                       <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
-                      جاري تسجيل الدخول...
+                      <span>جاري تسجيل الدخول...</span>
                     </>
                   ) : (
-                    'تسجيل الدخول'
+                    <>
+                      <span>تسجيل الدخول</span>
+                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_forward</span>
+                    </>
                   )}
                 </button>
 
                 <div className="eq-demo-credentials">
                   <span className="eq-demo-title">بيانات الدخول الافتراضية:</span>
                   <div className="eq-demo-pills">
-                    <span>مستخدم: <strong>admin</strong></span>
-                    <span>كلمة المرور: <strong>Admin@1234</strong></span>
+                    <span className="eq-demo-pill">مستخدم: <strong>admin</strong></span>
+                    <span className="eq-demo-pill">كلمة المرور: <strong>Admin@1234</strong></span>
                   </div>
                 </div>
               </form>
@@ -202,7 +213,8 @@ export default function Login() {
               إدارة شاملة لدفاتر الأستاذ، القيود اليومية، موازين المراجعة، والتقارير ختامية بدقة متناهية.
             </p>
             <button type="button" onClick={() => scrollToSection('login-card-anchor')} className="eq-module-link">
-              اكتشف المزيد <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_left_alt</span>
+              <span>اكتشف المزيد</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_left_alt</span>
             </button>
           </div>
 
@@ -216,7 +228,8 @@ export default function Login() {
               تتبع دقيق للمخزون، المستودعات، عمليات الجرد، وإدارة سلاسل التوريد بكفاءة عالية.
             </p>
             <button type="button" onClick={() => scrollToSection('login-card-anchor')} className="eq-module-link">
-              اكتشف المزيد <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_left_alt</span>
+              <span>اكتشف المزيد</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_left_alt</span>
             </button>
           </div>
 
@@ -230,7 +243,8 @@ export default function Login() {
               إدارة عقود الموردين، أوامر الشراء، والمشتريات المتأخرة بسهولة.
             </p>
             <button type="button" onClick={() => scrollToSection('login-card-anchor')} className="eq-module-link">
-              اكتشف المزيد <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_left_alt</span>
+              <span>اكتشف المزيد</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_left_alt</span>
             </button>
           </div>
 
@@ -244,7 +258,8 @@ export default function Login() {
               منظومة كاملة لإدارة المبيعات، عروض الأسعار، فواتير العملاء، وتحليل بيانات السوق باستخدام الذكاء الاصطناعي.
             </p>
             <button type="button" onClick={() => scrollToSection('login-card-anchor')} className="eq-module-link">
-              اكتشف المزيد <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_left_alt</span>
+              <span>اكتشف المزيد</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_left_alt</span>
             </button>
           </div>
 
@@ -258,7 +273,8 @@ export default function Login() {
               إدارة شؤون الموظفين، الرواتب، الحضور والانصراف، والتقييم الدوري.
             </p>
             <button type="button" onClick={() => scrollToSection('login-card-anchor')} className="eq-module-link">
-              اكتشف المزيد <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_left_alt</span>
+              <span>اكتشف المزيد</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_left_alt</span>
             </button>
           </div>
 
@@ -272,7 +288,8 @@ export default function Login() {
               إعداد صلاحيات المستخدمين، الربط مع الأنظمة الخارجية، وتخصيص هوية المؤسسة.
             </p>
             <button type="button" onClick={() => scrollToSection('login-card-anchor')} className="eq-module-link">
-              اكتشف المزيد <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_left_alt</span>
+              <span>اكتشف المزيد</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_left_alt</span>
             </button>
           </div>
         </div>
@@ -304,8 +321,13 @@ export default function Login() {
       <footer className="eq-footer">
         <div className="eq-footer-top">
           <div className="eq-footer-brand">
-            <div className="eq-footer-logo">نظام إدارة الموارد المؤسسية</div>
-            <p className="eq-footer-desc">الحل الأمثل لإدارة الموارد المالية والبشرية بذكاء وكفاءة.</p>
+            <div className="eq-brand" style={{ marginBottom: '0.75rem' }}>
+              <div className="eq-brand-icon" style={{ width: 32, height: 32, borderRadius: 8 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#ffffff' }}>hub</span>
+              </div>
+              <span className="eq-brand-title" style={{ fontSize: '1.2rem' }}>نظام إدارة الموارد المؤسسية</span>
+            </div>
+            <p className="eq-footer-desc">الحل الأمثل لإدارة الموارد المالية والإدارية بذكاء وكفاءة.</p>
           </div>
 
           <div className="eq-footer-links-group">
@@ -328,13 +350,13 @@ export default function Login() {
 
         <div className="eq-footer-bottom">
           <div className="eq-footer-copyright">
-            نظام إدارة الموارد المؤسسية. جميع الحقوق محفوظة © 2024
+            نظام إدارة الموارد المؤسسية. جميع الحقوق محفوظة © 2026
           </div>
           <div className="eq-footer-legal">
-            <a href="#privacy" onClick={(e) => e.preventDefault()}>Privacy Policy</a>
-            <a href="#terms" onClick={(e) => e.preventDefault()}>Terms of Service</a>
-            <a href="#help" onClick={(e) => e.preventDefault()}>Help Center</a>
-            <a href="#contact" onClick={(e) => e.preventDefault()}>Contact Support</a>
+            <a href="#privacy" onClick={(e) => e.preventDefault()}>سياسة الخصوصية</a>
+            <a href="#terms" onClick={(e) => e.preventDefault()}>شروط الاستخدام</a>
+            <a href="#help" onClick={(e) => e.preventDefault()}>مركز المساعدة</a>
+            <a href="#contact" onClick={(e) => e.preventDefault()}>الدعم الفني</a>
           </div>
         </div>
       </footer>

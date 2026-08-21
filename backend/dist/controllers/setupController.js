@@ -390,7 +390,29 @@ exports.createDepartment = createDepartment;
 // ========== SUPPLIERS ==========
 const getSuppliers = async (req, res) => {
     try {
-        const result = await (0, db_1.query)(`SELECT s.*, cu.code AS currency_code, cu.name_ar AS currency_name FROM suppliers s
+        const result = await (0, db_1.query)(`SELECT s.*, 
+              cu.code AS currency_code, cu.name_ar AS currency_name,
+              COALESCE(
+                (
+                  SELECT json_agg(
+                    json_build_object(
+                      'currency_id', sc.currency_id,
+                      'currency_code', c.code,
+                      'currency_name', c.name_ar,
+                      'symbol', c.symbol,
+                      'balance', sc.balance,
+                      'opening_balance', sc.opening_balance,
+                      'credit_limit', sc.credit_limit,
+                      'is_default', sc.is_default
+                    )
+                  )
+                  FROM supplier_currencies sc
+                  JOIN currencies c ON sc.currency_id = c.id
+                  WHERE sc.supplier_id = s.id
+                ),
+                '[]'::json
+              ) AS currencies
+       FROM suppliers s
        LEFT JOIN currencies cu ON s.currency_id = cu.id
        WHERE s.company_id = $1 ORDER BY s.code`, [req.user.companyId]);
         (0, response_1.successResponse)(res, result.rows);
@@ -402,9 +424,12 @@ const getSuppliers = async (req, res) => {
 exports.getSuppliers = getSuppliers;
 const createSupplier = async (req, res) => {
     try {
-        const { code, nameAr, nameEn, contactPerson, phone, email, city, address, taxNumber, crNumber, creditLimit, openingBalance, currencyId, apAccountId, paymentTerms, status } = req.body;
-        if (!currencyId) {
-            (0, response_1.errorResponse)(res, 'العملة مطلوبة', 400);
+        const { code, nameAr, nameEn, contactPerson, phone, email, city, address, taxNumber, crNumber, creditLimit, openingBalance, currencyId, currencyIds, currencies, apAccountId, paymentTerms, status } = req.body;
+        const chosenCurrencyIds = currencyIds && Array.isArray(currencyIds) && currencyIds.length > 0
+            ? currencyIds
+            : (currencyId ? [currencyId] : []);
+        if (chosenCurrencyIds.length === 0) {
+            (0, response_1.errorResponse)(res, 'يجب تحديد عملة واحدة على الأقل للمورد', 400);
             return;
         }
         if (!nameAr) {
@@ -421,18 +446,31 @@ const createSupplier = async (req, res) => {
         const creditLimitValue = (creditLimit !== undefined && creditLimit !== null && creditLimit !== '')
             ? parseFloat(creditLimit)
             : null;
-        const result = await (0, db_1.query)(`INSERT INTO suppliers 
-        (company_id, code, name_ar, name_en, contact_person, phone, email, city, address,
-         tax_number, cr_number, credit_limit, currency_id,
-         ap_account_id, payment_terms, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-       RETURNING *`, [
-            req.user.companyId, supplierCode, nameAr, nameEn || null, contactPerson || null,
-            phone || null, email || null, city || null, address || null,
-            taxNumber || null, crNumber || null, creditLimitValue,
-            currencyId || null, apAccountId || null, paymentTerms || 30, status || 'Active'
-        ]);
-        (0, response_1.successResponse)(res, result.rows[0], 'تم إضافة المورد بنجاح', 201);
+        const primaryCurrencyId = chosenCurrencyIds[0];
+        const result = await (0, db_1.transaction)(async (client) => {
+            const suppRes = await client.query(`INSERT INTO suppliers 
+          (company_id, code, name_ar, name_en, contact_person, phone, email, city, address,
+           tax_number, cr_number, credit_limit, currency_id,
+           ap_account_id, payment_terms, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         RETURNING *`, [
+                req.user.companyId, supplierCode, nameAr, nameEn || null, contactPerson || null,
+                phone || null, email || null, city || null, address || null,
+                taxNumber || null, crNumber || null, creditLimitValue,
+                primaryCurrencyId, apAccountId || null, paymentTerms || 30, status || 'Active'
+            ]);
+            const supplier = suppRes.rows[0];
+            // Insert into supplier_currencies
+            for (let i = 0; i < chosenCurrencyIds.length; i++) {
+                const cId = chosenCurrencyIds[i];
+                const openBal = (i === 0 && openingBalance !== undefined) ? Number(openingBalance) || 0 : 0;
+                await client.query(`INSERT INTO supplier_currencies (supplier_id, currency_id, opening_balance, balance, credit_limit, is_default)
+           VALUES ($1, $2, $3, $3, $4, $5)
+           ON CONFLICT (supplier_id, currency_id) DO NOTHING`, [supplier.id, cId, openBal, creditLimitValue, i === 0]);
+            }
+            return supplier;
+        });
+        (0, response_1.successResponse)(res, result, 'تم إضافة المورد بنجاح', 201);
     }
     catch (error) {
         if (error.code === '23505') {
@@ -447,28 +485,51 @@ exports.createSupplier = createSupplier;
 const updateSupplier = async (req, res) => {
     try {
         const { id } = req.params;
-        const { nameAr, nameEn, contactPerson, phone, email, city, address, taxNumber, crNumber, creditLimit, currencyId, apAccountId, paymentTerms, status } = req.body;
+        const { nameAr, nameEn, contactPerson, phone, email, city, address, taxNumber, crNumber, creditLimit, currencyId, currencyIds, apAccountId, paymentTerms, status } = req.body;
         const creditLimitValue = (creditLimit !== undefined && creditLimit !== null && creditLimit !== '')
             ? parseFloat(creditLimit)
             : null;
-        const result = await (0, db_1.query)(`UPDATE suppliers SET
-        name_ar=$1, name_en=$2, contact_person=$3, phone=$4, email=$5,
-        city=$6, address=$7, tax_number=$8, cr_number=$9, credit_limit=$10,
-        currency_id=$11, ap_account_id=$12, payment_terms=$13, status=$14
-       WHERE id=$15 AND company_id=$16 RETURNING *`, [
-            nameAr, nameEn || null, contactPerson || null, phone || null, email || null,
-            city || null, address || null, taxNumber || null, crNumber || null, creditLimitValue,
-            currencyId || null, apAccountId || null, paymentTerms || 30, status || 'Active',
-            id, req.user.companyId
-        ]);
-        if (result.rows.length === 0) {
-            (0, response_1.errorResponse)(res, 'المورد غير موجود', 404);
-            return;
-        }
-        (0, response_1.successResponse)(res, result.rows[0], 'تم تحديث المورد بنجاح');
+        const chosenCurrencyIds = currencyIds && Array.isArray(currencyIds) && currencyIds.length > 0
+            ? currencyIds
+            : (currencyId ? [currencyId] : []);
+        const primaryCurrencyId = chosenCurrencyIds.length > 0 ? chosenCurrencyIds[0] : null;
+        await (0, db_1.transaction)(async (client) => {
+            const result = await client.query(`UPDATE suppliers SET
+          name_ar=$1, name_en=$2, contact_person=$3, phone=$4, email=$5,
+          city=$6, address=$7, tax_number=$8, cr_number=$9, credit_limit=$10,
+          currency_id=COALESCE($11, currency_id), ap_account_id=$12, payment_terms=$13, status=$14
+         WHERE id=$15 AND company_id=$16 RETURNING *`, [
+                nameAr, nameEn || null, contactPerson || null, phone || null, email || null,
+                city || null, address || null, taxNumber || null, crNumber || null, creditLimitValue,
+                primaryCurrencyId, apAccountId || null, paymentTerms || 30, status || 'Active',
+                id, req.user.companyId
+            ]);
+            if (result.rows.length === 0) {
+                throw new Error('NOT_FOUND');
+            }
+            // Sync supplier_currencies
+            if (chosenCurrencyIds.length > 0) {
+                // Insert any new currencies
+                for (let i = 0; i < chosenCurrencyIds.length; i++) {
+                    const cId = chosenCurrencyIds[i];
+                    await client.query(`INSERT INTO supplier_currencies (supplier_id, currency_id, opening_balance, balance, credit_limit, is_default)
+             VALUES ($1, $2, 0, 0, $3, $4)
+             ON CONFLICT (supplier_id, currency_id) DO UPDATE SET is_default = $4`, [id, cId, creditLimitValue, i === 0]);
+                }
+                // Remove currencies no longer in chosenCurrencyIds (only if balance is 0)
+                await client.query(`DELETE FROM supplier_currencies WHERE supplier_id = $1 AND currency_id != ALL($2) AND balance = 0`, [id, chosenCurrencyIds]);
+            }
+        });
+        const updated = await (0, db_1.query)(`SELECT * FROM suppliers WHERE id = $1`, [id]);
+        (0, response_1.successResponse)(res, updated.rows[0], 'تم تحديث المورد بنجاح');
     }
     catch (error) {
-        (0, response_1.errorResponse)(res, 'خطأ في تحديث المورد', 500);
+        if (error.message === 'NOT_FOUND') {
+            (0, response_1.errorResponse)(res, 'المورد غير موجود', 404);
+        }
+        else {
+            (0, response_1.errorResponse)(res, 'خطأ في تحديث المورد', 500);
+        }
     }
 };
 exports.updateSupplier = updateSupplier;

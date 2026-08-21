@@ -16,6 +16,7 @@ const accounting_1 = __importDefault(require("./routes/accounting"));
 const inventory_1 = __importDefault(require("./routes/inventory"));
 const sales_1 = __importDefault(require("./routes/sales"));
 const cashBanks_1 = __importDefault(require("./routes/cashBanks"));
+const purchasing_1 = __importDefault(require("./routes/purchasing"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = parseInt(process.env.PORT || '5000');
@@ -74,6 +75,8 @@ app.use('/api/sales', sales_1.default);
 app.use('/sales', sales_1.default);
 app.use('/api/cash-banks', cashBanks_1.default);
 app.use('/cash-banks', cashBanks_1.default);
+app.use('/api/purchasing', purchasing_1.default);
+app.use('/purchasing', purchasing_1.default);
 // ── 404 Handler ──────────────────────────────────────────────────
 app.use((_req, res) => {
     res.status(404).json({ success: false, message: 'المسار غير موجود' });

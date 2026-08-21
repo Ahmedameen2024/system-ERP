@@ -1,12 +1,34 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createSalesReturn = exports.getSalesReturns = exports.getCustomerStatement = exports.getSalesDashboardStats = exports.voidSalesInvoice = exports.postSalesInvoice = exports.createSalesInvoice = exports.getSalesInvoiceById = exports.getSalesInvoices = exports.updateCustomer = exports.createCustomer = exports.getCustomers = void 0;
+exports.createSalesReturn = exports.getSalesReturns = exports.getCustomerStatement = exports.getSalesDashboardStats = exports.voidSalesInvoice = exports.postSalesInvoice = exports.deleteSalesInvoice = exports.updateSalesInvoice = exports.createSalesInvoice = exports.getSalesInvoiceById = exports.getSalesInvoices = exports.updateCustomer = exports.createCustomer = exports.getCustomers = void 0;
 const db_1 = require("../config/db");
 const response_1 = require("../utils/response");
 // ========== CUSTOMERS ==========
 const getCustomers = async (req, res) => {
     try {
-        const result = await (0, db_1.query)(`SELECT c.*, cu.code AS currency_code FROM customers c
+        const result = await (0, db_1.query)(`SELECT c.*, 
+              cu.code AS currency_code, cu.name_ar AS currency_name,
+              COALESCE(
+                (
+                  SELECT json_agg(
+                    json_build_object(
+                      'currency_id', cc.currency_id,
+                      'currency_code', cur.code,
+                      'currency_name', cur.name_ar,
+                      'symbol', cur.symbol,
+                      'balance', cc.balance,
+                      'opening_balance', cc.opening_balance,
+                      'credit_limit', cc.credit_limit,
+                      'is_default', cc.is_default
+                    )
+                  )
+                  FROM customer_currencies cc
+                  JOIN currencies cur ON cc.currency_id = cur.id
+                  WHERE cc.customer_id = c.id
+                ),
+                '[]'::json
+              ) AS currencies
+       FROM customers c
        LEFT JOIN currencies cu ON c.currency_id = cu.id
        WHERE c.company_id = $1 ORDER BY c.code`, [req.user.companyId]);
         (0, response_1.successResponse)(res, result.rows);
@@ -18,10 +40,32 @@ const getCustomers = async (req, res) => {
 exports.getCustomers = getCustomers;
 const createCustomer = async (req, res) => {
     try {
-        const { code, nameAr, nameEn, tradeName, phone, email, city, address, taxNumber, crNumber, creditLimit, currencyId, arAccountId, paymentTerms, status } = req.body;
-        const result = await (0, db_1.query)(`INSERT INTO customers (company_id, code, name_ar, name_en, trade_name, phone, email, city, address, tax_number, cr_number, credit_limit, currency_id, ar_account_id, payment_terms, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`, [req.user.companyId, code, nameAr, nameEn, tradeName || '', phone || '', email || '', city || '', address || '', taxNumber || '', crNumber || '', creditLimit || 0, currencyId || null, arAccountId || null, paymentTerms || 30, status || 'Active']);
-        (0, response_1.successResponse)(res, result.rows[0], 'تم إضافة العميل بنجاح', 201);
+        const { code, nameAr, nameEn, tradeName, phone, email, city, address, taxNumber, crNumber, creditLimit, openingBalance, currencyId, currencyIds, arAccountId, paymentTerms, status } = req.body;
+        const chosenCurrencyIds = currencyIds && Array.isArray(currencyIds) && currencyIds.length > 0
+            ? currencyIds
+            : (currencyId ? [currencyId] : []);
+        const primaryCurrencyId = chosenCurrencyIds.length > 0 ? chosenCurrencyIds[0] : null;
+        const result = await (0, db_1.transaction)(async (client) => {
+            const custRes = await client.query(`INSERT INTO customers (company_id, code, name_ar, name_en, trade_name, phone, email, city, address, tax_number, cr_number, credit_limit, opening_balance, balance, currency_id, ar_account_id, payment_terms, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`, [
+                req.user.companyId, code, nameAr, nameEn || nameAr, tradeName || '',
+                phone || '', email || '', city || '', address || '',
+                taxNumber || '', crNumber || '', creditLimit || 0,
+                openingBalance || 0, openingBalance || 0,
+                primaryCurrencyId, arAccountId || null, paymentTerms || 30, status || 'Active'
+            ]);
+            const customer = custRes.rows[0];
+            // Insert into customer_currencies
+            for (let i = 0; i < chosenCurrencyIds.length; i++) {
+                const cId = chosenCurrencyIds[i];
+                const openBal = (i === 0 && openingBalance !== undefined) ? Number(openingBalance) || 0 : 0;
+                await client.query(`INSERT INTO customer_currencies (customer_id, currency_id, opening_balance, balance, credit_limit, is_default)
+           VALUES ($1, $2, $3, $3, $4, $5)
+           ON CONFLICT (customer_id, currency_id) DO NOTHING`, [customer.id, cId, openBal, creditLimit || null, i === 0]);
+            }
+            return customer;
+        });
+        (0, response_1.successResponse)(res, result, 'تم إضافة العميل بنجاح', 201);
     }
     catch (error) {
         if (error.code === '23505')
@@ -34,27 +78,65 @@ exports.createCustomer = createCustomer;
 const updateCustomer = async (req, res) => {
     try {
         const { id } = req.params;
-        const { code, nameAr, nameEn, tradeName, phone, email, city, address, taxNumber, crNumber, creditLimit, currencyId, arAccountId, paymentTerms, status } = req.body;
-        const result = await (0, db_1.query)(`UPDATE customers SET code=$1, name_ar=$2, name_en=$3, trade_name=$4, phone=$5, email=$6, city=$7, address=$8, tax_number=$9, cr_number=$10, credit_limit=$11, currency_id=$12, ar_account_id=$13, payment_terms=$14, status=$15
-       WHERE id=$16 AND company_id=$17 RETURNING *`, [code, nameAr, nameEn, tradeName || '', phone || '', email || '', city || '', address || '', taxNumber || '', crNumber || '', creditLimit || 0, currencyId || null, arAccountId || null, paymentTerms || 30, status, id, req.user.companyId]);
-        if (result.rows.length === 0) {
-            (0, response_1.errorResponse)(res, 'العميل غير موجود', 404);
-            return;
-        }
-        (0, response_1.successResponse)(res, result.rows[0], 'تم تحديث العميل بنجاح');
+        const { code, nameAr, nameEn, tradeName, phone, email, city, address, taxNumber, crNumber, creditLimit, currencyId, currencyIds, arAccountId, paymentTerms, status } = req.body;
+        const chosenCurrencyIds = currencyIds && Array.isArray(currencyIds) && currencyIds.length > 0
+            ? currencyIds
+            : (currencyId ? [currencyId] : []);
+        const primaryCurrencyId = chosenCurrencyIds.length > 0 ? chosenCurrencyIds[0] : null;
+        await (0, db_1.transaction)(async (client) => {
+            const result = await client.query(`UPDATE customers SET
+           code=$1, name_ar=$2, name_en=$3, trade_name=$4, phone=$5, email=$6,
+           city=$7, address=$8, tax_number=$9, cr_number=$10, credit_limit=$11,
+           currency_id=COALESCE($12, currency_id), ar_account_id=$13, payment_terms=$14, status=$15
+         WHERE id=$16 AND company_id=$17 RETURNING *`, [
+                code, nameAr, nameEn, tradeName || '', phone || '', email || '',
+                city || '', address || '', taxNumber || '', crNumber || '', creditLimit || 0,
+                primaryCurrencyId, arAccountId || null, paymentTerms || 30, status,
+                id, req.user.companyId
+            ]);
+            if (result.rows.length === 0) {
+                throw new Error('NOT_FOUND');
+            }
+            // Sync customer_currencies
+            if (chosenCurrencyIds.length > 0) {
+                for (let i = 0; i < chosenCurrencyIds.length; i++) {
+                    const cId = chosenCurrencyIds[i];
+                    await client.query(`INSERT INTO customer_currencies (customer_id, currency_id, opening_balance, balance, credit_limit, is_default)
+             VALUES ($1, $2, 0, 0, $3, $4)
+             ON CONFLICT (customer_id, currency_id) DO UPDATE SET is_default = $4`, [id, cId, creditLimit || null, i === 0]);
+                }
+                // Remove unused currencies with 0 balance
+                await client.query(`DELETE FROM customer_currencies WHERE customer_id = $1 AND currency_id != ALL($2) AND balance = 0`, [id, chosenCurrencyIds]);
+            }
+        });
+        const updated = await (0, db_1.query)(`SELECT * FROM customers WHERE id=$1`, [id]);
+        (0, response_1.successResponse)(res, updated.rows[0], 'تم تحديث العميل بنجاح');
     }
     catch (error) {
-        (0, response_1.errorResponse)(res, 'خطأ في تحديث العميل', 500);
+        if (error.message === 'NOT_FOUND') {
+            (0, response_1.errorResponse)(res, 'العميل غير موجود', 404);
+        }
+        else {
+            (0, response_1.errorResponse)(res, 'خطأ في تحديث العميل', 500);
+        }
     }
 };
 exports.updateCustomer = updateCustomer;
 // ========== SALES INVOICES ==========
 const getSalesInvoices = async (req, res) => {
     try {
-        const result = await (0, db_1.query)(`SELECT si.*, c.name_ar AS customer_name, c.code AS customer_code, w.name_ar AS warehouse_name
+        const result = await (0, db_1.query)(`SELECT si.*, 
+              c.name_ar AS customer_name, c.code AS customer_code, 
+              w.name_ar AS warehouse_name,
+              cur.code AS currency_code, cur.name_ar AS currency_name, cur.symbol AS currency_symbol, cur.is_default AS currency_is_default,
+              co.base_currency_id, def_cur.code AS base_currency_code, def_cur.symbol AS base_currency_symbol
        FROM sales_invoices si
        JOIN customers c ON si.customer_id = c.id
+       JOIN currencies cur ON si.currency_id = cur.id
        LEFT JOIN warehouses w ON si.warehouse_id = w.id
+       LEFT JOIN branches b ON b.id = si.branch_id
+       LEFT JOIN companies co ON co.id = b.company_id
+       LEFT JOIN currencies def_cur ON def_cur.id = co.base_currency_id
        WHERE si.branch_id IN (SELECT id FROM branches WHERE company_id=$1)
        ORDER BY si.created_at DESC LIMIT 200`, [req.user.companyId]);
         (0, response_1.successResponse)(res, result.rows);
@@ -67,11 +149,19 @@ exports.getSalesInvoices = getSalesInvoices;
 const getSalesInvoiceById = async (req, res) => {
     try {
         const { id } = req.params;
-        const headerResult = await (0, db_1.query)(`SELECT si.*, c.name_ar AS customer_name, c.code AS customer_code, c.tax_number AS customer_tax_number,
-              c.address AS customer_address, w.name_ar AS warehouse_name
+        const headerResult = await (0, db_1.query)(`SELECT si.*, 
+              c.name_ar AS customer_name, c.code AS customer_code, c.tax_number AS customer_tax_number,
+              c.address AS customer_address, c.ar_account_id,
+              w.name_ar AS warehouse_name,
+              cur.code AS currency_code, cur.name_ar AS currency_name, cur.symbol AS currency_symbol, cur.decimal_places, cur.is_default AS currency_is_default,
+              co.base_currency_id, def_cur.code AS base_currency_code, def_cur.name_ar AS base_currency_name, def_cur.symbol AS base_currency_symbol
        FROM sales_invoices si
        JOIN customers c ON si.customer_id = c.id
+       JOIN currencies cur ON si.currency_id = cur.id
        LEFT JOIN warehouses w ON si.warehouse_id = w.id
+       LEFT JOIN branches b ON b.id = si.branch_id
+       LEFT JOIN companies co ON co.id = b.company_id
+       LEFT JOIN currencies def_cur ON def_cur.id = co.base_currency_id
        WHERE si.id=$1`, [id]);
         if (headerResult.rows.length === 0) {
             (0, response_1.errorResponse)(res, 'الفاتورة غير موجودة', 404);
@@ -92,10 +182,38 @@ exports.getSalesInvoiceById = getSalesInvoiceById;
 const createSalesInvoice = async (req, res) => {
     try {
         const { customerId, warehouseId, invoiceDate, dueDate, currencyId, exchangeRate, salesRepId, paymentMethodId, notes, lines } = req.body;
-        if (!lines || lines.length === 0) {
-            (0, response_1.errorResponse)(res, 'يجب إضافة أصناف للفاتورة', 400);
+        if (!customerId) {
+            (0, response_1.errorResponse)(res, 'العميل مطلوب', 400);
             return;
         }
+        if (!warehouseId) {
+            (0, response_1.errorResponse)(res, 'المستودع مطلوب', 400);
+            return;
+        }
+        if (!invoiceDate) {
+            (0, response_1.errorResponse)(res, 'تاريخ الفاتورة مطلوب', 400);
+            return;
+        }
+        if (!currencyId) {
+            (0, response_1.errorResponse)(res, 'العملة مطلوبة — يجب اختيار عملة من قائمة العملات', 400);
+            return;
+        }
+        if (!lines || lines.length === 0) {
+            (0, response_1.errorResponse)(res, 'يجب إضافة صنف واحد على الأقل للفاتورة', 400);
+            return;
+        }
+        const rate = Number(exchangeRate);
+        if (isNaN(rate) || rate <= 0) {
+            (0, response_1.errorResponse)(res, 'سعر الصرف يجب أن يكون أكبر من صفر', 400);
+            return;
+        }
+        // Validate currency exists & check if default
+        const currencyCheck = await (0, db_1.query)(`SELECT id, code, is_default FROM currencies WHERE id = $1 AND status = 'Active'`, [currencyId]);
+        if (currencyCheck.rows.length === 0) {
+            (0, response_1.errorResponse)(res, 'العملة غير موجودة أو غير نشطة', 400);
+            return;
+        }
+        const finalRate = currencyCheck.rows[0].is_default ? 1 : rate;
         await (0, db_1.transaction)(async (client) => {
             // 1. Calculate totals
             let totalAmount = 0;
@@ -103,10 +221,17 @@ const createSalesInvoice = async (req, res) => {
             let taxAmount = 0;
             const processedLines = [];
             for (const line of lines) {
-                const gross = Number(line.quantity) * Number(line.unitPrice);
-                const discountAmt = gross * (Number(line.discountPercentage) / 100);
+                const qty = Number(line.quantity);
+                const unitPrice = Number(line.unitPrice);
+                const discPct = Number(line.discountPercentage || 0);
+                const taxRate = Number(line.taxRate || 0);
+                if (qty <= 0 || unitPrice < 0) {
+                    throw new Error('الكمية يجب أن تكون أكبر من صفر وسعر الوحدة لا يمكن أن يكون سالباً');
+                }
+                const gross = qty * unitPrice;
+                const discountAmt = gross * (discPct / 100);
                 const subtotal = gross - discountAmt;
-                const lineTax = subtotal * (Number(line.taxRate || 0) / 100);
+                const lineTax = subtotal * (taxRate / 100);
                 const lineTotal = subtotal + lineTax;
                 totalAmount += subtotal;
                 discountAmount += discountAmt;
@@ -114,20 +239,20 @@ const createSalesInvoice = async (req, res) => {
                 // Fetch current item cost from inventory_balances (WAC)
                 const balRes = await client.query(`SELECT average_cost FROM inventory_balances WHERE item_id=$1 AND warehouse_id=$2`, [line.itemId, warehouseId]);
                 const unitCost = balRes.rows.length > 0 ? Number(balRes.rows[0].average_cost) : 0;
-                const cogsAmount = Number(line.quantity) * unitCost;
-                processedLines.push({ ...line, lineTotal, lineTax, discountAmt, unitCost, cogsAmount });
+                const cogsAmount = qty * unitCost;
+                processedLines.push({ ...line, qty, unitPrice, discPct, lineTotal, lineTax, discountAmt, unitCost, cogsAmount });
             }
             const netAmount = totalAmount + taxAmount;
             // 2. Create Invoice Header
             const invoiceNumber = `INV-${Date.now()}`;
             const invoiceResult = await client.query(`INSERT INTO sales_invoices (invoice_number, invoice_date, due_date, customer_id, branch_id, warehouse_id, currency_id, exchange_rate, sales_rep_id, payment_method_id, total_amount, discount_amount, tax_amount, net_amount, remaining_amount, notes, status, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14,$15,'Draft',$16) RETURNING *`, [invoiceNumber, invoiceDate, dueDate || null, customerId, req.user.branchId, warehouseId, currencyId || null, exchangeRate || 1, salesRepId || null, paymentMethodId || null, totalAmount, discountAmount, taxAmount, netAmount, notes || '', req.user.userId]);
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14,$15,'Draft',$16) RETURNING *`, [invoiceNumber, invoiceDate, dueDate || null, customerId, req.user.branchId, warehouseId, currencyId, finalRate, salesRepId || null, paymentMethodId || null, totalAmount, discountAmount, taxAmount, netAmount, notes || '', req.user.userId]);
             const invoiceId = invoiceResult.rows[0].id;
             // 3. Insert Lines
             for (let i = 0; i < processedLines.length; i++) {
                 const line = processedLines[i];
                 await client.query(`INSERT INTO sales_invoice_lines (sales_invoice_id, item_id, uom_id, quantity, unit_price, discount_percentage, tax_amount, total_amount, unit_cost, cogs_amount, notes, sort_order)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [invoiceId, line.itemId, line.uomId, line.quantity, line.unitPrice, line.discountPercentage || 0, line.lineTax, line.lineTotal, line.unitCost, line.cogsAmount, line.notes || '', i]);
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [invoiceId, line.itemId, line.uomId, line.qty, line.unitPrice, line.discPct, line.lineTax, line.lineTotal, line.unitCost, line.cogsAmount, line.notes || '', i]);
             }
             (0, response_1.successResponse)(res, invoiceResult.rows[0], 'تم إنشاء الفاتورة بنجاح', 201);
         });
@@ -137,19 +262,126 @@ const createSalesInvoice = async (req, res) => {
     }
 };
 exports.createSalesInvoice = createSalesInvoice;
+const updateSalesInvoice = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { customerId, warehouseId, invoiceDate, dueDate, currencyId, exchangeRate, salesRepId, paymentMethodId, notes, lines } = req.body;
+        const existing = await (0, db_1.query)(`SELECT status FROM sales_invoices WHERE id = $1 AND branch_id IN (SELECT id FROM branches WHERE company_id = $2)`, [id, req.user.companyId]);
+        if (existing.rows.length === 0) {
+            (0, response_1.errorResponse)(res, 'الفاتورة غير موجودة', 404);
+            return;
+        }
+        if (existing.rows[0].status !== 'Draft') {
+            (0, response_1.errorResponse)(res, 'لا يمكن تعديل الفاتورة إلا في حالة المسودة', 400);
+            return;
+        }
+        if (!currencyId) {
+            (0, response_1.errorResponse)(res, 'العملة مطلوبة', 400);
+            return;
+        }
+        const rate = Number(exchangeRate);
+        if (isNaN(rate) || rate <= 0) {
+            (0, response_1.errorResponse)(res, 'سعر الصرف يجب أن يكون أكبر من صفر', 400);
+            return;
+        }
+        if (!lines || lines.length === 0) {
+            (0, response_1.errorResponse)(res, 'يجب إضافة صنف واحد على الأقل', 400);
+            return;
+        }
+        const currencyCheck = await (0, db_1.query)(`SELECT id, is_default FROM currencies WHERE id=$1`, [currencyId]);
+        const finalRate = currencyCheck.rows[0]?.is_default ? 1 : rate;
+        await (0, db_1.transaction)(async (client) => {
+            let totalAmount = 0;
+            let discountAmount = 0;
+            let taxAmount = 0;
+            const processedLines = [];
+            for (const line of lines) {
+                const qty = Number(line.quantity);
+                const unitPrice = Number(line.unitPrice);
+                const discPct = Number(line.discountPercentage || 0);
+                const taxRate = Number(line.taxRate || 0);
+                const gross = qty * unitPrice;
+                const discountAmt = gross * (discPct / 100);
+                const subtotal = gross - discountAmt;
+                const lineTax = subtotal * (taxRate / 100);
+                const lineTotal = subtotal + lineTax;
+                totalAmount += subtotal;
+                discountAmount += discountAmt;
+                taxAmount += lineTax;
+                const balRes = await client.query(`SELECT average_cost FROM inventory_balances WHERE item_id=$1 AND warehouse_id=$2`, [line.itemId, warehouseId]);
+                const unitCost = balRes.rows.length > 0 ? Number(balRes.rows[0].average_cost) : 0;
+                const cogsAmount = qty * unitCost;
+                processedLines.push({ ...line, qty, unitPrice, discPct, lineTotal, lineTax, discountAmt, unitCost, cogsAmount });
+            }
+            const netAmount = totalAmount + taxAmount;
+            await client.query(`UPDATE sales_invoices SET
+           customer_id=$1, warehouse_id=$2, invoice_date=$3, due_date=$4,
+           currency_id=$5, exchange_rate=$6, sales_rep_id=$7, payment_method_id=$8,
+           total_amount=$9, discount_amount=$10, tax_amount=$11, net_amount=$12, remaining_amount=$12,
+           notes=$13
+         WHERE id=$14`, [customerId, warehouseId, invoiceDate, dueDate || null, currencyId, finalRate, salesRepId || null, paymentMethodId || null, totalAmount, discountAmount, taxAmount, netAmount, notes || '', id]);
+            await client.query(`DELETE FROM sales_invoice_lines WHERE sales_invoice_id = $1`, [id]);
+            for (let i = 0; i < processedLines.length; i++) {
+                const line = processedLines[i];
+                await client.query(`INSERT INTO sales_invoice_lines (sales_invoice_id, item_id, uom_id, quantity, unit_price, discount_percentage, tax_amount, total_amount, unit_cost, cogs_amount, notes, sort_order)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [id, line.itemId, line.uomId, line.qty, line.unitPrice, line.discPct, line.lineTax, line.lineTotal, line.unitCost, line.cogsAmount, line.notes || '', i]);
+            }
+            const updated = await client.query(`SELECT * FROM sales_invoices WHERE id = $1`, [id]);
+            (0, response_1.successResponse)(res, updated.rows[0], 'تم تحديث الفاتورة بنجاح');
+        });
+    }
+    catch (error) {
+        (0, response_1.errorResponse)(res, error.message || 'خطأ في تحديث الفاتورة', 500);
+    }
+};
+exports.updateSalesInvoice = updateSalesInvoice;
+const deleteSalesInvoice = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const existing = await (0, db_1.query)(`SELECT status FROM sales_invoices WHERE id = $1 AND branch_id IN (SELECT id FROM branches WHERE company_id = $2)`, [id, req.user.companyId]);
+        if (existing.rows.length === 0) {
+            (0, response_1.errorResponse)(res, 'الفاتورة غير موجودة', 404);
+            return;
+        }
+        if (existing.rows[0].status !== 'Draft') {
+            (0, response_1.errorResponse)(res, 'لا يمكن حذف الفاتورة إلا في حالة المسودة', 400);
+            return;
+        }
+        await (0, db_1.transaction)(async (client) => {
+            await client.query(`DELETE FROM sales_invoice_lines WHERE sales_invoice_id = $1`, [id]);
+            await client.query(`DELETE FROM sales_invoices WHERE id = $1`, [id]);
+        });
+        (0, response_1.successResponse)(res, null, 'تم حذف الفاتورة بنجاح');
+    }
+    catch (error) {
+        (0, response_1.errorResponse)(res, 'خطأ في حذف الفاتورة', 500);
+    }
+};
+exports.deleteSalesInvoice = deleteSalesInvoice;
 const postSalesInvoice = async (req, res) => {
     try {
         const { id } = req.params;
         await (0, db_1.transaction)(async (client) => {
             // Fetch Invoice Header
-            const invRes = await client.query(`SELECT * FROM sales_invoices WHERE id=$1 FOR UPDATE`, [id]);
+            const invRes = await client.query(`SELECT si.*, 
+                c.code AS currency_code, c.is_default AS currency_is_default,
+                co.base_currency_id,
+                def_c.code AS base_currency_code
+         FROM sales_invoices si
+         JOIN currencies c ON si.currency_id = c.id
+         JOIN branches b ON b.id = si.branch_id
+         JOIN companies co ON co.id = b.company_id
+         LEFT JOIN currencies def_c ON def_c.id = co.base_currency_id
+         WHERE si.id=$1 FOR UPDATE`, [id]);
             if (invRes.rows.length === 0)
                 throw new Error('الفاتورة غير موجودة');
             const invoice = invRes.rows[0];
-            if (invoice.status !== 'Draft')
-                throw new Error('يمكن ترحيل الفواتير في حالة "مسودة" فقط');
+            if (!['Draft', 'Approved'].includes(invoice.status)) {
+                throw new Error('يمكن ترحيل الفواتير في حالة "مسودة" أو "معتمدة" فقط');
+            }
+            const exchangeRate = Number(invoice.exchange_rate);
             // Fetch Lines
-            const linesRes = await client.query(`SELECT sil.*, i.inventory_account_id, i.cogs_account_id, i.revenue_account_id
+            const linesRes = await client.query(`SELECT sil.*, i.inventory_account_id, i.cogs_account_id, i.revenue_account_id, i.name_ar AS item_name
          FROM sales_invoice_lines sil
          JOIN items i ON sil.item_id = i.id
          WHERE sil.sales_invoice_id=$1 ORDER BY sil.sort_order`, [id]);
@@ -169,58 +401,70 @@ const postSalesInvoice = async (req, res) => {
                 const cogsAmount = Number(line.quantity) * currentAvgCost;
                 await client.query(`UPDATE sales_invoice_lines SET unit_cost=$1, cogs_amount=$2 WHERE id=$3`, [currentAvgCost, cogsAmount, line.id]);
                 await client.query(`UPDATE inventory_balances SET quantity_on_hand=$1, total_value=$2, last_updated=NOW() WHERE item_id=$3 AND warehouse_id=$4`, [newQty, newValue, line.item_id, invoice.warehouse_id]);
+                // Record inventory issue transaction
+                const txnNumber = `TXN-SINV-${Date.now()}-${line.item_id.slice(0, 8)}`;
+                const txnRes = await client.query(`INSERT INTO inventory_transactions
+             (transaction_number, transaction_date, transaction_type, warehouse_id,
+              reference_type, reference_id, description, status, created_by)
+           VALUES ($1,$2,'Issue',$3,'SalesInvoice',$4,$5,'Posted',$6) RETURNING id`, [
+                    txnNumber, invoice.invoice_date, invoice.warehouse_id,
+                    id, `صرف بضاعة لمبيعات: ${line.item_name} — ${invoice.invoice_number}`,
+                    req.user.userId
+                ]);
+                const txnId = txnRes.rows[0].id;
+                await client.query(`INSERT INTO inventory_transaction_lines
+             (inventory_transaction_id, item_id, uom_id, quantity, unit_cost, total_cost)
+           VALUES ($1,$2,$3,$4,$5,$6)`, [txnId, line.item_id, line.uom_id, Number(line.quantity), currentAvgCost, cogsAmount]);
             }
-            // 2. Build aggregated totals for Journal Entry
-            // We need: Revenue accounts and COGS accounts
-            let totalRevenue = 0;
-            let totalCogs = 0;
-            let totalTax = Number(invoice.tax_amount);
+            // 2. Build aggregated totals for Journal Entry in BASE CURRENCY
+            let totalRevenueBase = 0;
+            let totalCogs = 0; // COGS is already in base currency from inventory_balances
+            const totalTaxBase = Number(invoice.tax_amount) * exchangeRate;
+            const netAmountBase = Number(invoice.net_amount) * exchangeRate;
             const revenueByAccount = {};
             const cogsByAccount = {};
             for (const line of lines) {
-                const lineRevenue = Number(line.total_amount) - Number(line.tax_amount);
+                const lineRevenueOrig = Number(line.total_amount) - Number(line.tax_amount);
+                const lineRevenueBase = lineRevenueOrig * exchangeRate;
                 const lineCogs = Number(line.quantity) * Number(line.unit_cost);
                 if (line.revenue_account_id) {
-                    revenueByAccount[line.revenue_account_id] = (revenueByAccount[line.revenue_account_id] || 0) + lineRevenue;
+                    revenueByAccount[line.revenue_account_id] = (revenueByAccount[line.revenue_account_id] || 0) + lineRevenueBase;
                 }
                 if (line.cogs_account_id) {
                     cogsByAccount[line.cogs_account_id] = (cogsByAccount[line.cogs_account_id] || 0) + lineCogs;
                 }
-                if (line.inventory_account_id) {
-                    cogsByAccount[`${line.cogs_account_id}_inv_${line.inventory_account_id}`] = Number(lineCogs);
-                }
-                totalRevenue += lineRevenue;
+                totalRevenueBase += lineRevenueBase;
                 totalCogs += lineCogs;
             }
             // 3. Fetch Customer's AR Account
             const custRes = await client.query(`SELECT ar_account_id FROM customers WHERE id=$1`, [invoice.customer_id]);
             const arAccountId = custRes.rows[0]?.ar_account_id;
-            const netAmount = Number(invoice.net_amount);
-            const jeTotal = netAmount; // Debit AR = Net Amount (incl. tax)
-            // 4. Create Journal Entry
+            // 4. Create Main Journal Entry (Debit AR = Net Amount in Base Currency)
             const jeNumber = `JE-SALES-${Date.now()}`;
+            const description = invoice.currency_is_default
+                ? `فاتورة مبيعات: ${invoice.invoice_number}`
+                : `فاتورة مبيعات: ${invoice.invoice_number} (${invoice.currency_code} × ${exchangeRate} = ${invoice.base_currency_code})`;
             const jeRes = await client.query(`INSERT INTO journal_entries (entry_number, entry_date, description, reference_no, reference_type, reference_id, branch_id, total_debit, total_credit, created_by, status)
-         VALUES ($1,$2,$3,$4,'SalesInvoice',$5,$6,$7,$7,$8,'Posted') RETURNING id`, [jeNumber, invoice.invoice_date, `فاتورة مبيعات: ${invoice.invoice_number}`, invoice.invoice_number, id, invoice.branch_id, jeTotal, req.user.userId]);
+         VALUES ($1,$2,$3,$4,'SalesInvoice',$5,$6,$7,$7,$8,'Posted') RETURNING id`, [jeNumber, invoice.invoice_date, description, invoice.invoice_number, id, invoice.branch_id, netAmountBase, req.user.userId]);
             const jeId = jeRes.rows[0].id;
-            // Debit: Accounts Receivable (full net amount incl. VAT)
+            // Debit: Accounts Receivable (full net amount incl. VAT in base currency)
             if (arAccountId) {
-                await client.query(`INSERT INTO journal_entry_lines (journal_entry_id, gl_account_id, debit, credit, line_description) VALUES ($1,$2,$3,0,$4)`, [jeId, arAccountId, netAmount, `مديونية عميل: فاتورة ${invoice.invoice_number}`]);
+                await client.query(`INSERT INTO journal_entry_lines (journal_entry_id, gl_account_id, debit, credit, line_description) VALUES ($1,$2,$3,0,$4)`, [jeId, arAccountId, netAmountBase, `مديونية عميل: فاتورة ${invoice.invoice_number}`]);
             }
-            // Credit: Revenue accounts
+            // Credit: Revenue accounts (in base currency)
             for (const [accId, amount] of Object.entries(revenueByAccount)) {
                 if (accId && amount > 0) {
                     await client.query(`INSERT INTO journal_entry_lines (journal_entry_id, gl_account_id, debit, credit, line_description) VALUES ($1,$2,0,$3,$4)`, [jeId, accId, amount, `إيرادات مبيعات: ${invoice.invoice_number}`]);
                 }
             }
-            // Credit: VAT Payable (if any — simplified: use a hardcoded search for VAT account)
-            if (totalTax > 0) {
-                // Try to find a VAT Payable (Liability) account
+            // Credit: VAT Payable (in base currency)
+            if (totalTaxBase > 0) {
                 const vatAccRes = await client.query(`SELECT id FROM gl_accounts WHERE company_id=$1 AND account_type='Liability' AND (name_ar LIKE '%ضريبة%' OR name_en ILIKE '%vat%' OR name_en ILIKE '%tax payable%') AND status='Active' LIMIT 1`, [req.user.companyId]);
                 if (vatAccRes.rows.length > 0) {
-                    await client.query(`INSERT INTO journal_entry_lines (journal_entry_id, gl_account_id, debit, credit, line_description) VALUES ($1,$2,0,$3,$4)`, [jeId, vatAccRes.rows[0].id, totalTax, `ضريبة القيمة المضافة: ${invoice.invoice_number}`]);
+                    await client.query(`INSERT INTO journal_entry_lines (journal_entry_id, gl_account_id, debit, credit, line_description) VALUES ($1,$2,0,$3,$4)`, [jeId, vatAccRes.rows[0].id, totalTaxBase, `ضريبة القيمة المضافة: ${invoice.invoice_number}`]);
                 }
             }
-            // COGS Journal Entry (separate JE for cost deduction)
+            // COGS Journal Entry (separate JE for cost deduction in base currency)
             if (totalCogs > 0) {
                 const cogsJeNumber = `JE-COGS-${Date.now()}`;
                 const cogsJeRes = await client.query(`INSERT INTO journal_entries (entry_number, entry_date, description, reference_no, reference_type, reference_id, branch_id, total_debit, total_credit, created_by, status)
@@ -242,9 +486,18 @@ const postSalesInvoice = async (req, res) => {
             }
             // 5. Update invoice status and link JE
             await client.query(`UPDATE sales_invoices SET status='Posted', journal_entry_id=$1, approved_by=$2 WHERE id=$3`, [jeId, req.user.userId, id]);
-            // 6. Update customer balance
-            await client.query(`UPDATE customers SET balance = balance + $1 WHERE id=$2`, [netAmount, invoice.customer_id]);
-            (0, response_1.successResponse)(res, { invoiceId: id, jeId, status: 'Posted' }, 'تم ترحيل الفاتورة وإنشاء القيود المحاسبية وتحديث المخزون');
+            // 6. Update customer balance (in base currency)
+            await client.query(`UPDATE customers SET balance = balance + $1 WHERE id=$2`, [netAmountBase, invoice.customer_id]);
+            (0, response_1.successResponse)(res, {
+                invoiceId: id,
+                jeId,
+                status: 'Posted',
+                netAmount: Number(invoice.net_amount),
+                currencyCode: invoice.currency_code,
+                exchangeRate,
+                baseAmount: netAmountBase,
+                baseCurrencyCode: invoice.base_currency_code
+            }, 'تم ترحيل الفاتورة وإنشاء القيود المحاسبية وتحديث المخزون');
         });
     }
     catch (error) {
@@ -256,12 +509,22 @@ const voidSalesInvoice = async (req, res) => {
     try {
         const { id } = req.params;
         const { reason } = req.body;
-        const result = await (0, db_1.query)(`UPDATE sales_invoices SET status='Void' WHERE id=$1 AND company_id IN (SELECT company_id FROM branches WHERE id=(SELECT branch_id FROM sales_invoices WHERE id=$1)) RETURNING *`, [id]);
-        if (result.rows.length === 0) {
+        const existing = await (0, db_1.query)(`SELECT status, customer_id, net_amount, exchange_rate FROM sales_invoices WHERE id=$1 AND branch_id IN (SELECT id FROM branches WHERE company_id=$2)`, [id, req.user.companyId]);
+        if (existing.rows.length === 0) {
             (0, response_1.errorResponse)(res, 'الفاتورة غير موجودة', 404);
             return;
         }
-        (0, response_1.successResponse)(res, result.rows[0], 'تم إلغاء الفاتورة');
+        if (existing.rows[0].status === 'Void') {
+            (0, response_1.errorResponse)(res, 'الفاتورة ملغاة مسبقاً', 400);
+            return;
+        }
+        if (existing.rows[0].status === 'Posted') {
+            // Deduct from customer balance
+            const netAmountBase = Number(existing.rows[0].net_amount) * Number(existing.rows[0].exchange_rate || 1);
+            await (0, db_1.query)(`UPDATE customers SET balance = balance - $1 WHERE id=$2`, [netAmountBase, existing.rows[0].customer_id]);
+        }
+        const result = await (0, db_1.query)(`UPDATE sales_invoices SET status='Void' WHERE id=$1 RETURNING *`, [id]);
+        (0, response_1.successResponse)(res, result.rows[0], reason ? `تم إلغاء الفاتورة: ${reason}` : 'تم إلغاء الفاتورة');
     }
     catch (error) {
         (0, response_1.errorResponse)(res, 'خطأ في إلغاء الفاتورة', 500);

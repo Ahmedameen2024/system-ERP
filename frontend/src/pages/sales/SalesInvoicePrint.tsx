@@ -1,10 +1,66 @@
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import api from '../../api/client';
 
 export default function SalesInvoicePrint() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const invoice = {
+  const { data: invoiceData, isLoading } = useQuery({
+    queryKey: ['sales-invoice', id],
+    queryFn: async () => {
+      if (!id || id.startsWith('INV-')) return null;
+      const res = await api.get(`/sales/invoices/${id}`);
+      return res.data.data;
+    },
+    enabled: !!id && !id.startsWith('INV-'),
+  });
+
+  const { data: company } = useQuery({
+    queryKey: ['company'],
+    queryFn: async () => {
+      const res = await api.get('/setup/company');
+      return res.data.data;
+    },
+  });
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const invoice = invoiceData ? {
+    number: invoiceData.invoice_number,
+    date: invoiceData.invoice_date ? new Date(invoiceData.invoice_date).toLocaleDateString('ar-SA') : '',
+    dueDate: invoiceData.due_date ? new Date(invoiceData.due_date).toLocaleDateString('ar-SA') : '—',
+    paymentMethod: invoiceData.payment_method_name || 'نقدي / آجل',
+    crNumber: company?.cr_number || '١٠١٠٠٠٠٠٠١',
+    taxNumber: company?.tax_number || '٣٠٠٠٠٠٠٠٠٠٠٠٠٠٣',
+    companyName: company?.name_ar || 'مؤسسة الأعمال الحديثة',
+    companyAddress: company?.address || 'المملكة العربية السعودية',
+    customerName: invoiceData.customer_name || '—',
+    customerTaxNumber: invoiceData.customer_tax_number || '—',
+    customerAddress: invoiceData.customer_address || '—',
+    currencyCode: invoiceData.currency_code || 'SAR',
+    currencySymbol: invoiceData.currency_symbol || invoiceData.currency_code || 'ر.س',
+    exchangeRate: Number(invoiceData.exchange_rate || 1),
+    baseCurrencyCode: invoiceData.base_currency_code,
+    baseCurrencySymbol: invoiceData.base_currency_symbol,
+    lines: (invoiceData.lines || []).map((l: any) => ({
+      code: l.item_code || '—',
+      name: l.item_name || '—',
+      qty: Number(l.quantity),
+      price: Number(l.unit_price),
+      discount: (Number(l.unit_price) * Number(l.quantity)) * (Number(l.discount_percentage || 0) / 100),
+      taxRate: Number(l.tax_rate || 15),
+      subtotal: Number(l.total_amount),
+      tax: Number(l.tax_amount || 0)
+    })),
+    subtotal: Number(invoiceData.total_amount || 0),
+    discount: Number(invoiceData.discount_amount || 0),
+    taxableAmount: Number(invoiceData.total_amount || 0),
+    vatAmount: Number(invoiceData.tax_amount || 0),
+    grandTotal: Number(invoiceData.net_amount || 0)
+  } : {
     number: id || 'INV-0089',
     date: '٢٠٢٥/٠٧/١٤',
     dueDate: '٢٠٢٥/٠٨/١٤',
@@ -16,6 +72,11 @@ export default function SalesInvoicePrint() {
     customerName: 'شركة الأفق للتجارة',
     customerTaxNumber: '٣١٠٢٣٤٥٦٧٨٠٠٠٠٣',
     customerAddress: 'طريق الملك عبدالعزيز، الرياض',
+    currencyCode: 'SAR',
+    currencySymbol: 'ر.س',
+    exchangeRate: 1,
+    baseCurrencyCode: 'SAR',
+    baseCurrencySymbol: 'ر.س',
     lines: [
       { code: 'ITM-9923', name: 'شاشة سامسونج LED 55 بوصة', qty: 2, price: 2250, discount: 225, taxRate: 15, subtotal: 4275, tax: 641.25 },
       { code: 'ITM-0887', name: 'كابل HDMI 3 متر', qty: 5, price: 45, discount: 0, taxRate: 15, subtotal: 225, tax: 33.75 }
@@ -27,13 +88,19 @@ export default function SalesInvoicePrint() {
     grandTotal: 4950
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const isForeign = invoice.exchangeRate !== 1;
+  const grandTotalBase = invoice.grandTotal * invoice.exchangeRate;
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
+        <div className="spinner" />
+      </div>
+    );
+  }
 
   return (
     <div style={{ background: '#f5f5f5', minHeight: '100vh', padding: '2rem 1rem', direction: 'rtl', fontFamily: 'system-ui, sans-serif' }}>
-      {/* Action panel at the top (hidden during printing) */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -65,12 +132,16 @@ export default function SalesInvoicePrint() {
             </p>
           </div>
           <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center' }}>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 0.5rem', color: '#191c1e' }}>فاتورة ضريبية مبسطة / Tax Invoice</h2>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 0.5rem', color: '#191c1e' }}>فاتورة ضريبية / Tax Invoice</h2>
             <div style={{ fontSize: '0.875rem', color: '#191c1e' }}>
               رقم الفاتورة: <span className="numeric" style={{ fontWeight: 700, color: '#006767' }}>{invoice.number}</span>
             </div>
             <div style={{ fontSize: '0.8125rem', color: '#6d7979', marginTop: '0.25rem' }}>
               تاريخ الإصدار: <span className="numeric">{invoice.date}</span>
+            </div>
+            <div style={{ fontSize: '0.8125rem', color: '#006767', marginTop: '0.25rem', fontWeight: 700 }}>
+              العملة: {invoice.currencyCode}
+              {isForeign && ` (سعر الصرف: ${invoice.exchangeRate})`}
             </div>
           </div>
         </div>
@@ -98,22 +169,22 @@ export default function SalesInvoicePrint() {
               <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.8125rem' }}>كود البند</th>
               <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.8125rem' }}>الوصف</th>
               <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.8125rem' }}>الكمية</th>
-              <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.8125rem' }}>سعر الوحدة</th>
+              <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.8125rem' }}>سعر الوحدة ({invoice.currencyCode})</th>
               <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.8125rem' }}>الخصم</th>
               <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.8125rem' }}>الضريبة %</th>
-              <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.8125rem' }}>الصافي</th>
+              <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.8125rem' }}>الصافي ({invoice.currencyCode})</th>
             </tr>
           </thead>
           <tbody>
-            {invoice.lines.map((line, idx) => (
+            {invoice.lines.map((line: any, idx: number) => (
               <tr key={idx} style={{ borderBottom: '1px solid #eceef0' }}>
                 <td style={{ padding: '0.75rem', fontSize: '0.8125rem', fontFamily: 'monospace' }}>{line.code}</td>
                 <td style={{ padding: '0.75rem', fontSize: '0.8125rem', fontWeight: 600 }}>{line.name}</td>
                 <td style={{ padding: '0.75rem', fontSize: '0.8125rem', textAlign: 'center' }}>{line.qty}</td>
-                <td style={{ padding: '0.75rem', fontSize: '0.8125rem', textAlign: 'left' }}>{line.price.toFixed(2)} ر.س</td>
+                <td style={{ padding: '0.75rem', fontSize: '0.8125rem', textAlign: 'left' }}>{line.price.toFixed(2)}</td>
                 <td style={{ padding: '0.75rem', fontSize: '0.8125rem', textAlign: 'left', color: '#ba1a1a' }}>{line.discount > 0 ? `-${line.discount.toFixed(2)}` : '—'}</td>
                 <td style={{ padding: '0.75rem', fontSize: '0.8125rem', textAlign: 'center' }}>{line.taxRate}%</td>
-                <td style={{ padding: '0.75rem', fontSize: '0.8125rem', textAlign: 'left', fontWeight: 700 }}>{line.subtotal.toFixed(2)} ر.س</td>
+                <td style={{ padding: '0.75rem', fontSize: '0.8125rem', textAlign: 'left', fontWeight: 700 }}>{line.subtotal.toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
@@ -121,7 +192,7 @@ export default function SalesInvoicePrint() {
 
         {/* Summary Block */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', alignItems: 'flex-start' }}>
-          {/* ZATCA QR Code (Required for e-invoicing in SA) */}
+          {/* ZATCA QR Code */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', border: '1px solid #bcc9c8', padding: '1rem', borderRadius: '8px', maxWidth: '300px' }}>
             <div style={{ width: '90px', height: '90px', background: '#eceef0', border: '1px solid #bcc9c8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 48, color: '#6d7979' }}>qr_code_2</span>
@@ -129,7 +200,7 @@ export default function SalesInvoicePrint() {
             <div>
               <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#006767' }}>رمز الاستجابة السريع ZATCA</div>
               <div style={{ fontSize: '0.7rem', color: '#6d7979', marginTop: '0.25rem', lineHeight: 1.3 }}>
-                فاتورة ضريبية مبسطة معتمدة ومتوافقة مع متطلبات الفوترة الإلكترونية للمرحلة الثانية.
+                فاتورة ضريبية معتمدة ومتوافقة مع متطلبات هيئة الزكاة والضريبة والجمارك.
               </div>
             </div>
           </div>
@@ -137,31 +208,41 @@ export default function SalesInvoicePrint() {
           {/* Invoice Totals */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', paddingRight: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-              <span>المجموع الفرعي (Subtotal)</span>
-              <span className="numeric">{invoice.subtotal.toFixed(2)} ر.س</span>
+              <span>المجموع الفرعي (Subtotal):</span>
+              <span className="numeric">{invoice.subtotal.toFixed(2)} {invoice.currencySymbol}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#ba1a1a' }}>
-              <span>إجمالي الخصم (Discount)</span>
-              <span className="numeric">-{invoice.discount.toFixed(2)} ر.س</span>
+            {invoice.discount > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#ba1a1a' }}>
+                <span>إجمالي الخصم (Discount):</span>
+                <span className="numeric">-{invoice.discount.toFixed(2)} {invoice.currencySymbol}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+              <span>الوعاء الضريبي (Taxable Amount):</span>
+              <span className="numeric">{invoice.taxableAmount.toFixed(2)} {invoice.currencySymbol}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-              <span>الوعاء الضريبي (Taxable Amount)</span>
-              <span className="numeric">{invoice.taxableAmount.toFixed(2)} ر.س</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-              <span>ضريبة القيمة المضافة ١٥% (VAT)</span>
-              <span className="numeric">{invoice.vatAmount.toFixed(2)} ر.س</span>
+              <span>ضريبة القيمة المضافة (VAT):</span>
+              <span className="numeric">{invoice.vatAmount.toFixed(2)} {invoice.currencySymbol}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.0625rem', fontWeight: 800, color: '#006767', borderTop: '2px solid #006767', paddingTop: '0.75rem', marginTop: '0.25rem' }}>
-              <span>الإجمالي المستحق (Total Due)</span>
-              <span className="numeric">{invoice.grandTotal.toFixed(2)} ر.س</span>
+              <span>الإجمالي المستحق (Total Due):</span>
+              <span className="numeric">{invoice.grandTotal.toFixed(2)} {invoice.currencySymbol}</span>
             </div>
+            {isForeign && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#6d7979', background: '#f8f9fb', padding: '0.4rem 0.6rem', borderRadius: '4px', marginTop: '0.25rem' }}>
+                <span>بالعملة الأساسية ({invoice.baseCurrencyCode || 'SAR'}):</span>
+                <span className="numeric" style={{ fontWeight: 700 }}>
+                  {grandTotalBase.toFixed(2)} {invoice.baseCurrencySymbol || invoice.baseCurrencyCode || 'ر.س'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Footer info */}
         <div style={{ marginTop: '4rem', borderTop: '1px solid #eceef0', paddingTop: '1.5rem', textAlign: 'center', fontSize: '0.75rem', color: '#6d7979' }}>
-          نشكركم لتعاملكم معنا. في حال وجود أي استفسار يرجى الاتصال بقسم الحسابات أو عبر البريد الإلكتروني المذكور أعلاه.
+          نشكركم لتعاملكم معنا. في حال وجود أي استفسار يرجى الاتصال بقسم الحسابات.
         </div>
       </div>
     </div>

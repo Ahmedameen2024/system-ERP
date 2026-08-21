@@ -17,6 +17,8 @@ router.get('/customers/:customerId/statement', authorize('sales', 'customers', '
 router.get('/invoices', authorize('sales', 'sales_invoices', 'view'), sales.getSalesInvoices);
 router.get('/invoices/:id', authorize('sales', 'sales_invoices', 'view'), sales.getSalesInvoiceById);
 router.post('/invoices', authorize('sales', 'sales_invoices', 'create'), sales.createSalesInvoice);
+router.put('/invoices/:id', authorize('sales', 'sales_invoices', 'edit'), sales.updateSalesInvoice);
+router.delete('/invoices/:id', authorize('sales', 'sales_invoices', 'delete'), sales.deleteSalesInvoice);
 router.post('/invoices/:id/post', authorize('sales', 'sales_invoices', 'approve'), sales.postSalesInvoice);
 router.post('/invoices/:id/void', authorize('sales', 'sales_invoices', 'approve'), sales.voidSalesInvoice);
 

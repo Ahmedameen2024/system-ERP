@@ -799,6 +799,84 @@ CREATE TABLE IF NOT EXISTS payment_voucher_lines (
     sort_order INTEGER DEFAULT 0
 );
 
+-- Multi-Currency Balances & Relationships
+CREATE TABLE IF NOT EXISTS customer_currencies (
+    customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
+    currency_id UUID REFERENCES currencies(id) ON DELETE RESTRICT,
+    opening_balance NUMERIC(15, 4) DEFAULT 0.0000,
+    balance NUMERIC(15, 4) DEFAULT 0.0000,
+    credit_limit NUMERIC(15, 4) DEFAULT NULL,
+    is_default BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (customer_id, currency_id)
+);
+
+CREATE TABLE IF NOT EXISTS supplier_currencies (
+    supplier_id UUID REFERENCES suppliers(id) ON DELETE CASCADE,
+    currency_id UUID REFERENCES currencies(id) ON DELETE RESTRICT,
+    opening_balance NUMERIC(15, 4) DEFAULT 0.0000,
+    balance NUMERIC(15, 4) DEFAULT 0.0000,
+    credit_limit NUMERIC(15, 4) DEFAULT NULL,
+    is_default BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (supplier_id, currency_id)
+);
+
+CREATE TABLE IF NOT EXISTS account_currencies (
+    gl_account_id UUID REFERENCES gl_accounts(id) ON DELETE CASCADE,
+    currency_id UUID REFERENCES currencies(id) ON DELETE RESTRICT,
+    opening_balance NUMERIC(15, 4) DEFAULT 0.0000,
+    balance NUMERIC(15, 4) DEFAULT 0.0000,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (gl_account_id, currency_id)
+);
+
+CREATE TABLE IF NOT EXISTS cash_box_currencies (
+    cash_box_id UUID REFERENCES cash_boxes(id) ON DELETE CASCADE,
+    currency_id UUID REFERENCES currencies(id) ON DELETE RESTRICT,
+    opening_balance NUMERIC(15, 4) DEFAULT 0.0000,
+    current_balance NUMERIC(15, 4) DEFAULT 0.0000,
+    maximum_balance NUMERIC(15, 4) DEFAULT 0.0000,
+    is_default BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (cash_box_id, currency_id)
+);
+
+CREATE TABLE IF NOT EXISTS bank_account_currencies (
+    bank_account_id UUID REFERENCES bank_accounts(id) ON DELETE CASCADE,
+    currency_id UUID REFERENCES currencies(id) ON DELETE RESTRICT,
+    opening_balance NUMERIC(15, 4) DEFAULT 0.0000,
+    current_balance NUMERIC(15, 4) DEFAULT 0.0000,
+    is_default BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (bank_account_id, currency_id)
+);
+
+-- Currency Transfers / Exchange Table
+CREATE TABLE IF NOT EXISTS currency_transfers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+    branch_id UUID REFERENCES branches(id),
+    transfer_number VARCHAR(100) NOT NULL UNIQUE,
+    transfer_date DATE NOT NULL,
+    source_cash_box_id UUID REFERENCES cash_boxes(id),
+    source_bank_account_id UUID REFERENCES bank_accounts(id),
+    source_currency_id UUID REFERENCES currencies(id) NOT NULL,
+    source_amount NUMERIC(15, 4) NOT NULL CHECK (source_amount > 0),
+    target_cash_box_id UUID REFERENCES cash_boxes(id),
+    target_bank_account_id UUID REFERENCES bank_accounts(id),
+    target_currency_id UUID REFERENCES currencies(id) NOT NULL,
+    target_amount NUMERIC(15, 4) NOT NULL CHECK (target_amount > 0),
+    exchange_rate NUMERIC(15, 6) NOT NULL CHECK (exchange_rate > 0),
+    difference_amount NUMERIC(15, 4) DEFAULT 0.0000,
+    difference_gl_account_id UUID REFERENCES gl_accounts(id),
+    notes TEXT,
+    status VARCHAR(20) DEFAULT 'Posted' CHECK (status IN ('Draft', 'Posted', 'Void')),
+    journal_entry_id UUID REFERENCES journal_entries(id),
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ============================================================
 -- PHASE 7: HR & BIOMETRIC ATTENDANCE
 -- ============================================================

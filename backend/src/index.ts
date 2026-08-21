@@ -11,6 +11,7 @@ import accountingRoutes from './routes/accounting';
 import inventoryRoutes from './routes/inventory';
 import salesRoutes from './routes/sales';
 import cashBanksRoutes from './routes/cashBanks';
+import purchasingRoutes from './routes/purchasing';
 
 dotenv.config();
 
@@ -82,6 +83,9 @@ app.use('/sales', salesRoutes);
 
 app.use('/api/cash-banks', cashBanksRoutes);
 app.use('/cash-banks', cashBanksRoutes);
+
+app.use('/api/purchasing', purchasingRoutes);
+app.use('/purchasing', purchasingRoutes);
 
 // ── 404 Handler ──────────────────────────────────────────────────
 app.use((_req, res) => {

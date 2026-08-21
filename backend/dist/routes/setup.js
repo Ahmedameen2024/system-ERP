@@ -88,5 +88,8 @@ router.get('/bank-accounts/:id', cashBanks.getBankAccountById);
 router.post('/bank-accounts', (0, auth_1.authorize)('system', 'bank_accounts', 'create'), cashBanks.createBankAccount);
 router.put('/bank-accounts/:id', (0, auth_1.authorize)('system', 'bank_accounts', 'edit'), cashBanks.updateBankAccount);
 router.delete('/bank-accounts/:id', (0, auth_1.authorize)('system', 'bank_accounts', 'delete'), cashBanks.deleteBankAccount);
+// Currency Transfers & FX Exchange
+router.get('/currency-transfers', cashBanks.getCurrencyTransfers);
+router.post('/currency-transfers', cashBanks.createCurrencyTransfer);
 exports.default = router;
 //# sourceMappingURL=setup.js.map

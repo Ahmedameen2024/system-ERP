@@ -67,4 +67,8 @@ router.post('/bank-accounts', authorize('system', 'bank_accounts', 'create'), ca
 router.put('/bank-accounts/:id', authorize('system', 'bank_accounts', 'edit'), cashBanks.updateBankAccount);
 router.delete('/bank-accounts/:id', authorize('system', 'bank_accounts', 'delete'), cashBanks.deleteBankAccount);
 
+// Currency Transfers & FX Exchange
+router.get('/currency-transfers', cashBanks.getCurrencyTransfers);
+router.post('/currency-transfers', cashBanks.createCurrencyTransfer);
+
 export default router;

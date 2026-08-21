@@ -89,6 +89,9 @@ export const testConnection = async (): Promise<void> => {
   } finally {
     client.release();
   }
+  // Run multi-currency schema migrations safely
+  const { runMultiCurrencyMigration } = await import('./migrateMultiCurrency');
+  await runMultiCurrencyMigration();
 };
 
 export default pool;

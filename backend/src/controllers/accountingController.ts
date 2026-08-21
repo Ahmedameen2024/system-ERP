@@ -6,7 +6,26 @@ import { successResponse, errorResponse } from '../utils/response';
 export const getAccounts = async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await query(
-      `SELECT * FROM gl_accounts WHERE company_id=$1 ORDER BY code`,
+      `SELECT a.*,
+              COALESCE(
+                (
+                  SELECT json_agg(
+                    json_build_object(
+                      'currency_id', ac.currency_id,
+                      'currency_code', cur.code,
+                      'currency_name', cur.name_ar,
+                      'symbol', cur.symbol,
+                      'balance', ac.balance
+                    )
+                  )
+                  FROM account_currencies ac
+                  JOIN currencies cur ON ac.currency_id = cur.id
+                  WHERE ac.gl_account_id = a.id
+                ),
+                '[]'::json
+              ) AS currencies
+       FROM gl_accounts a
+       WHERE a.company_id=$1 ORDER BY a.code`,
       [req.user!.companyId]
     );
     successResponse(res, result.rows);
@@ -17,13 +36,36 @@ export const getAccounts = async (req: Request, res: Response): Promise<void> =>
 
 export const createAccount = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { code, nameAr, nameEn, accountType, nature, accountLevel, allowPosting, parentId, status } = req.body;
-    const result = await query(
-      `INSERT INTO gl_accounts (company_id, code, name_ar, name_en, account_type, nature, account_level, allow_posting, parent_id, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [req.user!.companyId, code, nameAr, nameEn, accountType, nature, accountLevel || 1, allowPosting, parentId || null, status || 'Active']
-    );
-    successResponse(res, result.rows[0], 'تم إضافة الحساب بنجاح', 201);
+    const { code, nameAr, nameEn, accountType, nature, accountLevel, allowPosting, parentId, status, currencyId, currencyIds } = req.body;
+
+    const chosenCurrencyIds: string[] = currencyIds && Array.isArray(currencyIds) && currencyIds.length > 0
+      ? currencyIds
+      : (currencyId ? [currencyId] : []);
+
+    const primaryCurrencyId = chosenCurrencyIds.length > 0 ? chosenCurrencyIds[0] : null;
+
+    const result = await transaction(async (client) => {
+      const accRes = await client.query(
+        `INSERT INTO gl_accounts (company_id, code, name_ar, name_en, account_type, nature, account_level, allow_posting, parent_id, status, currency_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+        [req.user!.companyId, code, nameAr, nameEn, accountType, nature, accountLevel || 1, allowPosting, parentId || null, status || 'Active', primaryCurrencyId]
+      );
+
+      const account = accRes.rows[0];
+
+      for (const cId of chosenCurrencyIds) {
+        await client.query(
+          `INSERT INTO account_currencies (gl_account_id, currency_id, balance)
+           VALUES ($1, $2, 0)
+           ON CONFLICT (gl_account_id, currency_id) DO NOTHING`,
+          [account.id, cId]
+        );
+      }
+
+      return account;
+    });
+
+    successResponse(res, result, 'تم إضافة الحساب بنجاح', 201);
   } catch (error: any) {
     if (error.code === '23505') {
       errorResponse(res, 'رقم الحساب مستخدم مسبقاً', 409);
@@ -36,20 +78,50 @@ export const createAccount = async (req: Request, res: Response): Promise<void> 
 export const updateAccount = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { code, nameAr, nameEn, accountType, nature, accountLevel, allowPosting, parentId, status } = req.body;
-    const result = await query(
-      `UPDATE gl_accounts SET code=$1, name_ar=$2, name_en=$3, account_type=$4, nature=$5, 
-       account_level=$6, allow_posting=$7, parent_id=$8, status=$9 
-       WHERE id=$10 AND company_id=$11 RETURNING *`,
-      [code, nameAr, nameEn, accountType, nature, accountLevel, allowPosting, parentId || null, status, id, req.user!.companyId]
-    );
-    if (result.rows.length === 0) {
+    const { code, nameAr, nameEn, accountType, nature, accountLevel, allowPosting, parentId, status, currencyId, currencyIds } = req.body;
+
+    const chosenCurrencyIds: string[] = currencyIds && Array.isArray(currencyIds) && currencyIds.length > 0
+      ? currencyIds
+      : (currencyId ? [currencyId] : []);
+
+    const primaryCurrencyId = chosenCurrencyIds.length > 0 ? chosenCurrencyIds[0] : null;
+
+    await transaction(async (client) => {
+      const result = await client.query(
+        `UPDATE gl_accounts SET code=$1, name_ar=$2, name_en=$3, account_type=$4, nature=$5, 
+         account_level=$6, allow_posting=$7, parent_id=$8, status=$9, currency_id=COALESCE($10, currency_id)
+         WHERE id=$11 AND company_id=$12 RETURNING *`,
+        [code, nameAr, nameEn, accountType, nature, accountLevel, allowPosting, parentId || null, status, primaryCurrencyId, id, req.user!.companyId]
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error('NOT_FOUND');
+      }
+
+      if (chosenCurrencyIds.length > 0) {
+        for (const cId of chosenCurrencyIds) {
+          await client.query(
+            `INSERT INTO account_currencies (gl_account_id, currency_id, balance)
+             VALUES ($1, $2, 0)
+             ON CONFLICT (gl_account_id, currency_id) DO NOTHING`,
+            [id, cId]
+          );
+        }
+        await client.query(
+          `DELETE FROM account_currencies WHERE gl_account_id = $1 AND currency_id != ALL($2) AND balance = 0`,
+          [id, chosenCurrencyIds]
+        );
+      }
+    });
+
+    const updated = await query(`SELECT * FROM gl_accounts WHERE id=$1`, [id]);
+    successResponse(res, updated.rows[0], 'تم تحديث الحساب بنجاح');
+  } catch (error: any) {
+    if (error.message === 'NOT_FOUND') {
       errorResponse(res, 'الحساب غير موجود', 404);
-      return;
+    } else {
+      errorResponse(res, 'خطأ في تحديث الحساب', 500);
     }
-    successResponse(res, result.rows[0], 'تم تحديث الحساب بنجاح');
-  } catch (error) {
-    errorResponse(res, 'خطأ في تحديث الحساب', 500);
   }
 };
 
@@ -835,28 +907,49 @@ async function executeReceiptVoucherPosting(client: any, voucher: any, userId: s
   if (voucher.cash_box_id) {
     const cb = await client.query(`SELECT gl_account_id FROM cash_boxes WHERE id = $1`, [voucher.cash_box_id]);
     if (cb.rows.length > 0) debitGlAccountId = cb.rows[0].gl_account_id;
-    // Update Cash Box current balance
+    // Update Cash Box general balance & independent currency balance
     await client.query(
       `UPDATE cash_boxes SET current_balance = current_balance + $1, updated_at = NOW() WHERE id = $2`,
       [voucher.amount, voucher.cash_box_id]
     );
+    await client.query(
+      `INSERT INTO cash_box_currencies (cash_box_id, currency_id, current_balance, opening_balance)
+       VALUES ($1, $2, $3, 0)
+       ON CONFLICT (cash_box_id, currency_id)
+       DO UPDATE SET current_balance = cash_box_currencies.current_balance + $3`,
+      [voucher.cash_box_id, voucher.currency_id, voucher.amount]
+    );
   } else if (voucher.bank_account_id) {
     const ba = await client.query(`SELECT gl_account_id FROM bank_accounts WHERE id = $1`, [voucher.bank_account_id]);
     if (ba.rows.length > 0) debitGlAccountId = ba.rows[0].gl_account_id;
-    // Update Bank Account current balance
+    // Update Bank Account general balance & independent currency balance
     await client.query(
       `UPDATE bank_accounts SET current_balance = current_balance + $1, updated_at = NOW() WHERE id = $2`,
       [voucher.amount, voucher.bank_account_id]
+    );
+    await client.query(
+      `INSERT INTO bank_account_currencies (bank_account_id, currency_id, current_balance, opening_balance)
+       VALUES ($1, $2, $3, 0)
+       ON CONFLICT (bank_account_id, currency_id)
+       DO UPDATE SET current_balance = bank_account_currencies.current_balance + $3`,
+      [voucher.bank_account_id, voucher.currency_id, voucher.amount]
     );
   }
 
   if (voucher.customer_id) {
     const cust = await client.query(`SELECT ar_account_id FROM customers WHERE id = $1`, [voucher.customer_id]);
     if (cust.rows.length > 0) creditGlAccountId = cust.rows[0].ar_account_id;
-    // Update Customer balance (decrease balance)
+    // Update Customer general balance & independent currency balance (decrease debt)
     await client.query(
       `UPDATE customers SET balance = balance - $1 WHERE id = $2`,
       [voucher.amount, voucher.customer_id]
+    );
+    await client.query(
+      `INSERT INTO customer_currencies (customer_id, currency_id, balance, opening_balance)
+       VALUES ($1, $2, -$3, 0)
+       ON CONFLICT (customer_id, currency_id)
+       DO UPDATE SET balance = customer_currencies.balance - $3`,
+      [voucher.customer_id, voucher.currency_id, voucher.amount]
     );
   }
 
@@ -944,12 +1037,24 @@ async function executeReceiptVoucherPosting(client: any, voucher: any, userId: s
 async function executeReceiptVoucherReversal(client: any, voucher: any, userId: string) {
   if (voucher.cash_box_id) {
     await client.query(`UPDATE cash_boxes SET current_balance = current_balance - $1 WHERE id = $2`, [voucher.amount, voucher.cash_box_id]);
+    await client.query(
+      `UPDATE cash_box_currencies SET current_balance = current_balance - $1 WHERE cash_box_id = $2 AND currency_id = $3`,
+      [voucher.amount, voucher.cash_box_id, voucher.currency_id]
+    );
   } else if (voucher.bank_account_id) {
     await client.query(`UPDATE bank_accounts SET current_balance = current_balance - $1 WHERE id = $2`, [voucher.amount, voucher.bank_account_id]);
+    await client.query(
+      `UPDATE bank_account_currencies SET current_balance = current_balance - $1 WHERE bank_account_id = $2 AND currency_id = $3`,
+      [voucher.amount, voucher.bank_account_id, voucher.currency_id]
+    );
   }
 
   if (voucher.customer_id) {
     await client.query(`UPDATE customers SET balance = balance + $1 WHERE id = $2`, [voucher.amount, voucher.customer_id]);
+    await client.query(
+      `UPDATE customer_currencies SET balance = balance + $1 WHERE customer_id = $2 AND currency_id = $3`,
+      [voucher.amount, voucher.customer_id, voucher.currency_id]
+    );
   }
 
   if (voucher.journal_entry_id) {
@@ -1167,27 +1272,72 @@ export const updatePaymentVoucherStatus = async (req: Request, res: Response): P
 // Internal Helper for Payment Voucher Posting
 async function executePaymentVoucherPosting(client: any, voucher: any, lines: any[], userId: string) {
   let creditGlAccountId: string | null = null;
+  const voucherAmount = Number(voucher.amount);
 
   if (voucher.cash_box_id) {
     const cb = await client.query(`SELECT gl_account_id FROM cash_boxes WHERE id = $1`, [voucher.cash_box_id]);
     if (cb.rows.length > 0) creditGlAccountId = cb.rows[0].gl_account_id;
+
+    // Strict Currency Balance Check
+    const balRes = await client.query(
+      `SELECT current_balance FROM cash_box_currencies WHERE cash_box_id = $1 AND currency_id = $2 FOR UPDATE`,
+      [voucher.cash_box_id, voucher.currency_id]
+    );
+    const currBal = balRes.rows.length > 0 ? Number(balRes.rows[0].current_balance) : 0;
+    if (currBal < voucherAmount) {
+      const curRes = await client.query(`SELECT code FROM currencies WHERE id = $1`, [voucher.currency_id]);
+      const curCode = curRes.rows[0]?.code || '';
+      throw new Error(`رصيد الـ ${curCode} غير كافٍ في الصندوق. الرصيد المتوفر: ${currBal} ${curCode}، والمطلوب صرفه: ${voucherAmount} ${curCode}`);
+    }
+
+    // Deduct general balance & independent currency balance
     await client.query(
       `UPDATE cash_boxes SET current_balance = current_balance - $1, updated_at = NOW() WHERE id = $2`,
-      [voucher.amount, voucher.cash_box_id]
+      [voucherAmount, voucher.cash_box_id]
+    );
+    await client.query(
+      `UPDATE cash_box_currencies SET current_balance = current_balance - $1 WHERE cash_box_id = $2 AND currency_id = $3`,
+      [voucherAmount, voucher.cash_box_id, voucher.currency_id]
     );
   } else if (voucher.bank_account_id) {
     const ba = await client.query(`SELECT gl_account_id FROM bank_accounts WHERE id = $1`, [voucher.bank_account_id]);
     if (ba.rows.length > 0) creditGlAccountId = ba.rows[0].gl_account_id;
+
+    // Strict Currency Balance Check
+    const balRes = await client.query(
+      `SELECT current_balance FROM bank_account_currencies WHERE bank_account_id = $1 AND currency_id = $2 FOR UPDATE`,
+      [voucher.bank_account_id, voucher.currency_id]
+    );
+    const currBal = balRes.rows.length > 0 ? Number(balRes.rows[0].current_balance) : 0;
+    if (currBal < voucherAmount) {
+      const curRes = await client.query(`SELECT code FROM currencies WHERE id = $1`, [voucher.currency_id]);
+      const curCode = curRes.rows[0]?.code || '';
+      throw new Error(`رصيد الـ ${curCode} غير كافٍ في الحساب البنكي. الرصيد المتوفر: ${currBal} ${curCode}، والمطلوب صرفه: ${voucherAmount} ${curCode}`);
+    }
+
+    // Deduct general balance & independent currency balance
     await client.query(
       `UPDATE bank_accounts SET current_balance = current_balance - $1, updated_at = NOW() WHERE id = $2`,
-      [voucher.amount, voucher.bank_account_id]
+      [voucherAmount, voucher.bank_account_id]
+    );
+    await client.query(
+      `UPDATE bank_account_currencies SET current_balance = current_balance - $1 WHERE bank_account_id = $2 AND currency_id = $3`,
+      [voucherAmount, voucher.bank_account_id, voucher.currency_id]
     );
   }
 
   if (voucher.supplier_id) {
+    // Update general balance & independent currency balance for supplier
     await client.query(
       `UPDATE suppliers SET balance = balance - $1 WHERE id = $2`,
-      [voucher.amount, voucher.supplier_id]
+      [voucherAmount, voucher.supplier_id]
+    );
+    await client.query(
+      `INSERT INTO supplier_currencies (supplier_id, currency_id, balance, opening_balance)
+       VALUES ($1, $2, -$3, 0)
+       ON CONFLICT (supplier_id, currency_id)
+       DO UPDATE SET balance = supplier_currencies.balance - $3`,
+      [voucher.supplier_id, voucher.currency_id, voucherAmount]
     );
   }
 
@@ -1300,12 +1450,24 @@ async function executePaymentVoucherPosting(client: any, voucher: any, lines: an
 async function executePaymentVoucherReversal(client: any, voucher: any, userId: string) {
   if (voucher.cash_box_id) {
     await client.query(`UPDATE cash_boxes SET current_balance = current_balance + $1 WHERE id = $2`, [voucher.amount, voucher.cash_box_id]);
+    await client.query(
+      `UPDATE cash_box_currencies SET current_balance = current_balance + $1 WHERE cash_box_id = $2 AND currency_id = $3`,
+      [voucher.amount, voucher.cash_box_id, voucher.currency_id]
+    );
   } else if (voucher.bank_account_id) {
     await client.query(`UPDATE bank_accounts SET current_balance = current_balance + $1 WHERE id = $2`, [voucher.amount, voucher.bank_account_id]);
+    await client.query(
+      `UPDATE bank_account_currencies SET current_balance = current_balance + $1 WHERE bank_account_id = $2 AND currency_id = $3`,
+      [voucher.amount, voucher.bank_account_id, voucher.currency_id]
+    );
   }
 
   if (voucher.supplier_id) {
     await client.query(`UPDATE suppliers SET balance = balance + $1 WHERE id = $2`, [voucher.amount, voucher.supplier_id]);
+    await client.query(
+      `UPDATE supplier_currencies SET balance = balance + $1 WHERE supplier_id = $2 AND currency_id = $3`,
+      [voucher.amount, voucher.supplier_id, voucher.currency_id]
+    );
   }
 
   if (voucher.journal_entry_id) {

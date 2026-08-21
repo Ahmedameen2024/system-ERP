@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/client';
 
+interface CashBoxCurrency {
+  currency_id: string;
+  currency_code: string;
+  currency_name: string;
+  symbol?: string;
+  current_balance: number | string;
+  opening_balance: number | string;
+  maximum_balance: number | string;
+}
+
 interface CashBox {
   id: string;
   code: string;
@@ -21,6 +31,16 @@ interface CashBox {
   maximum_balance: number;
   status: 'Active' | 'Inactive';
   notes?: string;
+  currencies?: CashBoxCurrency[];
+}
+
+interface BankAccountCurrency {
+  currency_id: string;
+  currency_code: string;
+  currency_name: string;
+  symbol?: string;
+  current_balance: number | string;
+  opening_balance: number | string;
 }
 
 interface BankAccount {
@@ -46,6 +66,7 @@ interface BankAccount {
   current_balance: number;
   status: 'Active' | 'Inactive';
   notes?: string;
+  currencies?: BankAccountCurrency[];
 }
 
 interface OptionItem {
@@ -81,6 +102,7 @@ export default function CashBanksManagement() {
     nameEn: '',
     branchId: '',
     currencyId: '',
+    currencyIds: [] as string[],
     glAccountId: '',
     responsibleEmployeeId: '',
     openingBalance: 0,
@@ -96,6 +118,7 @@ export default function CashBanksManagement() {
     nameEn: '',
     branchId: '',
     currencyId: '',
+    currencyIds: [] as string[],
     glAccountId: '',
     accountNumber: '',
     iban: '',
@@ -136,13 +159,14 @@ export default function CashBanksManagement() {
       setUsers(uData);
 
       // Default dropdown values for new forms
+      const defCurIds = cData.length > 0 ? [cData[0].id] : [];
       if (bData.length > 0) {
         setCashForm((prev) => ({ ...prev, branchId: bData[0].id }));
         setBankForm((prev) => ({ ...prev, branchId: bData[0].id }));
       }
       if (cData.length > 0) {
-        setCashForm((prev) => ({ ...prev, currencyId: cData[0].id }));
-        setBankForm((prev) => ({ ...prev, currencyId: cData[0].id }));
+        setCashForm((prev) => ({ ...prev, currencyId: cData[0].id, currencyIds: defCurIds }));
+        setBankForm((prev) => ({ ...prev, currencyId: cData[0].id, currencyIds: defCurIds }));
       }
       if (aData.length > 0) {
         setCashForm((prev) => ({ ...prev, glAccountId: aData[0].id }));
@@ -235,12 +259,14 @@ export default function CashBanksManagement() {
   // Reset forms
   const resetCashForm = () => {
     setEditingId(null);
+    const defCurIds = currencies.length > 0 ? [currencies[0].id] : [];
     setCashForm({
       code: '',
       nameAr: '',
       nameEn: '',
       branchId: branches[0]?.id || '',
       currencyId: currencies[0]?.id || '',
+      currencyIds: defCurIds,
       glAccountId: glAccounts[0]?.id || '',
       responsibleEmployeeId: '',
       openingBalance: 0,
@@ -252,12 +278,14 @@ export default function CashBanksManagement() {
 
   const resetBankForm = () => {
     setEditingId(null);
+    const defCurIds = currencies.length > 0 ? [currencies[0].id] : [];
     setBankForm({
       code: '',
       nameAr: '',
       nameEn: '',
       branchId: branches[0]?.id || '',
       currencyId: currencies[0]?.id || '',
+      currencyIds: defCurIds,
       glAccountId: glAccounts[0]?.id || '',
       accountNumber: '',
       iban: '',
@@ -274,12 +302,16 @@ export default function CashBanksManagement() {
   // Edit Cash Box
   const handleEditCash = (cb: CashBox) => {
     setEditingId(cb.id);
+    const assignedCurIds = (cb.currencies && cb.currencies.length > 0)
+      ? cb.currencies.map(c => c.currency_id)
+      : (cb.currency_id ? [cb.currency_id] : (currencies.length > 0 ? [currencies[0].id] : []));
     setCashForm({
       code: cb.code,
       nameAr: cb.name_ar,
       nameEn: cb.name_en,
       branchId: cb.branch_id,
-      currencyId: cb.currency_id,
+      currencyId: assignedCurIds[0] || cb.currency_id,
+      currencyIds: assignedCurIds,
       glAccountId: cb.gl_account_id,
       responsibleEmployeeId: cb.responsible_employee_id || '',
       openingBalance: Number(cb.opening_balance) || 0,
@@ -293,12 +325,16 @@ export default function CashBanksManagement() {
   // Edit Bank Account
   const handleEditBank = (ba: BankAccount) => {
     setEditingId(ba.id);
+    const assignedCurIds = (ba.currencies && ba.currencies.length > 0)
+      ? ba.currencies.map(c => c.currency_id)
+      : (ba.currency_id ? [ba.currency_id] : (currencies.length > 0 ? [currencies[0].id] : []));
     setBankForm({
       code: ba.code,
       nameAr: ba.name_ar,
       nameEn: ba.name_en,
       branchId: ba.branch_id,
-      currencyId: ba.currency_id,
+      currencyId: assignedCurIds[0] || ba.currency_id,
+      currencyIds: assignedCurIds,
       glAccountId: ba.gl_account_id,
       accountNumber: ba.account_number,
       iban: ba.iban || '',
@@ -311,6 +347,32 @@ export default function CashBanksManagement() {
       notes: ba.notes || '',
     });
     setShowBankModal(true);
+  };
+
+  const toggleCashCurrency = (curId: string) => {
+    setCashForm(prev => {
+      const exists = prev.currencyIds.includes(curId);
+      if (exists) {
+        if (prev.currencyIds.length === 1) return prev;
+        const updated = prev.currencyIds.filter(id => id !== curId);
+        return { ...prev, currencyIds: updated, currencyId: updated[0] || '' };
+      }
+      const updated = [...prev.currencyIds, curId];
+      return { ...prev, currencyIds: updated, currencyId: updated[0] };
+    });
+  };
+
+  const toggleBankCurrency = (curId: string) => {
+    setBankForm(prev => {
+      const exists = prev.currencyIds.includes(curId);
+      if (exists) {
+        if (prev.currencyIds.length === 1) return prev;
+        const updated = prev.currencyIds.filter(id => id !== curId);
+        return { ...prev, currencyIds: updated, currencyId: updated[0] || '' };
+      }
+      const updated = [...prev.currencyIds, curId];
+      return { ...prev, currencyIds: updated, currencyId: updated[0] };
+    });
   };
 
   return (
@@ -406,10 +468,10 @@ export default function CashBanksManagement() {
                 <th>كود الصندوق</th>
                 <th>اسم الصندوق (عربي)</th>
                 <th>الفرع</th>
-                <th>العملة</th>
+                <th>العملات المسموحة</th>
                 <th>الحساب المحاسبي</th>
                 <th>الموظف المسؤول</th>
-                <th style={{ textAlign: 'left' }}>الرصيد الحالي</th>
+                <th style={{ textAlign: 'left' }}>الأرصدة المستقلة بالعملات</th>
                 <th>الحالة</th>
                 <th>الإجراءات</th>
               </tr>
@@ -431,11 +493,41 @@ export default function CashBanksManagement() {
                     </td>
                     <td style={{ fontWeight: 600 }}>{cb.name_ar}</td>
                     <td>{cb.branch_name_ar || '—'}</td>
-                    <td><span className="chip chip-info">{cb.currency_code || 'SAR'}</span></td>
+                    <td>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                        {cb.currencies && cb.currencies.length > 0 ? (
+                          cb.currencies.map(cur => (
+                            <span key={cur.currency_id} className="chip chip-primary" style={{ fontSize: '0.7rem', padding: '0.1rem 0.45rem' }}>
+                              {cur.currency_code}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="chip chip-info">{cb.currency_code || 'SAR'}</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="numeric">{cb.gl_account_code} - {cb.gl_account_name}</td>
                     <td>{cb.responsible_employee_name || '—'}</td>
-                    <td dir="ltr" className="numeric" style={{ textAlign: 'left', fontWeight: 700 }}>
-                      {Number(cb.current_balance || 0).toLocaleString('ar-SA')} {cb.currency_symbol || 'ر.س'}
+                    <td style={{ textAlign: 'left' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                        {cb.currencies && cb.currencies.length > 0 ? (
+                          cb.currencies.map(cur => {
+                            const bal = Number(cur.current_balance) || 0;
+                            return (
+                              <div key={cur.currency_id} style={{ display: 'flex', gap: '0.4rem', fontSize: '0.8rem', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 700, color: 'var(--color-text-muted)' }}>{cur.currency_code}:</span>
+                                <span className="numeric" style={{ fontWeight: 700, color: bal > 0 ? 'var(--color-primary)' : 'inherit' }}>
+                                  {bal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <span className="numeric" style={{ fontWeight: 700 }}>
+                            {Number(cb.current_balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} {cb.currency_symbol || ''}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <span className={`chip ${cb.status === 'Active' ? 'chip-success' : 'chip-neutral'}`}>
@@ -497,10 +589,40 @@ export default function CashBanksManagement() {
                     <td className="numeric">{ba.account_number}</td>
                     <td className="numeric" style={{ fontSize: '0.75rem' }}>{ba.iban || '—'}</td>
                     <td>{ba.branch_name_ar || '—'}</td>
-                    <td><span className="chip chip-info">{ba.currency_code || 'SAR'}</span></td>
+                    <td>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                        {ba.currencies && ba.currencies.length > 0 ? (
+                          ba.currencies.map(cur => (
+                            <span key={cur.currency_id} className="chip chip-primary" style={{ fontSize: '0.7rem', padding: '0.1rem 0.45rem' }}>
+                              {cur.currency_code}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="chip chip-info">{ba.currency_code || 'SAR'}</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="numeric">{ba.gl_account_code} - {ba.gl_account_name}</td>
-                    <td dir="ltr" className="numeric" style={{ textAlign: 'left', fontWeight: 700 }}>
-                      {Number(ba.current_balance || 0).toLocaleString('ar-SA')} {ba.currency_symbol || 'ر.س'}
+                    <td style={{ textAlign: 'left' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                        {ba.currencies && ba.currencies.length > 0 ? (
+                          ba.currencies.map(cur => {
+                            const bal = Number(cur.current_balance) || 0;
+                            return (
+                              <div key={cur.currency_id} style={{ display: 'flex', gap: '0.4rem', fontSize: '0.8rem', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 700, color: 'var(--color-text-muted)' }}>{cur.currency_code}:</span>
+                                <span className="numeric" style={{ fontWeight: 700, color: bal > 0 ? 'var(--color-primary)' : 'inherit' }}>
+                                  {bal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <span className="numeric" style={{ fontWeight: 700 }}>
+                            {Number(ba.current_balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} {ba.currency_symbol || ''}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <span className={`chip ${ba.status === 'Active' ? 'chip-success' : 'chip-neutral'}`}>
@@ -528,139 +650,100 @@ export default function CashBanksManagement() {
       {/* CASH BOX MODAL */}
       {showCashModal && (
         <div className="modal-overlay" onClick={() => setShowCashModal(false)}>
-          <div className="modal-box" style={{ maxWidth: '700px' }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1.25rem' }}>
-              {editingId ? 'تعديل بيانات الصندوق المالي' : 'إضافة صندوق مالي جديد'}
-            </h2>
-            <form onSubmit={handleCashSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label>كود الصندوق (Cash Code) *</label>
-                  <input
-                    className="input numeric"
-                    value={cashForm.code}
-                    onChange={(e) => setCashForm({ ...cashForm, code: e.target.value })}
-                    required
-                    placeholder="مثال: CASH-01"
-                  />
+          <div className="modal-box" style={{ maxWidth: '750px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <h2 style={{ fontSize: '1.125rem', fontWeight: 700, margin: 0 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 20, verticalAlign: 'middle', marginLeft: 8, color: 'var(--color-primary)' }}>point_of_sale</span>
+                {editingId ? 'تعديل بيانات الصندوق المالي' : 'إضافة صندوق مالي جديد'}
+              </h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowCashModal(false)}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+              </button>
+            </div>
+            <form onSubmit={handleCashSave} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div>
+                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem', paddingBottom: '0.4rem', borderBottom: '1px solid var(--color-border)' }}>البيانات الأساسية</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label>كود الصندوق (Cash Code) *</label>
+                    <input className="input numeric" value={cashForm.code} onChange={(e) => setCashForm({ ...cashForm, code: e.target.value })} required placeholder="مثال: CASH-01" />
+                  </div>
+                  <div>
+                    <label>الاسم بالعربية *</label>
+                    <input className="input" value={cashForm.nameAr} onChange={(e) => setCashForm({ ...cashForm, nameAr: e.target.value })} required placeholder="مثال: الخزينة الرئيسية" />
+                  </div>
+                  <div>
+                    <label>الاسم بالإنجليزي</label>
+                    <input className="input" value={cashForm.nameEn} onChange={(e) => setCashForm({ ...cashForm, nameEn: e.target.value })} placeholder="Main Cash Box" />
+                  </div>
+                  <div>
+                    <label>الفرع *</label>
+                    <select className="input" value={cashForm.branchId} onChange={(e) => setCashForm({ ...cashForm, branchId: e.target.value })} required>
+                      {branches.map((b) => (<option key={b.id} value={b.id}>{b.name_ar}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label>الحساب المحاسبي المرتبط (GL Account) *</label>
+                    <select className="input" value={cashForm.glAccountId} onChange={(e) => setCashForm({ ...cashForm, glAccountId: e.target.value })} required>
+                      {glAccounts.map((a) => (<option key={a.id} value={a.id}>{a.code} - {a.name_ar}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label>الموظف المسؤول</label>
+                    <select className="input" value={cashForm.responsibleEmployeeId} onChange={(e) => setCashForm({ ...cashForm, responsibleEmployeeId: e.target.value })}>
+                      <option value="">-- اختياري --</option>
+                      {users.map((u) => (<option key={u.id} value={u.id}>{u.name_ar}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label>الرصيد الافتتاحي</label>
+                    <input className="input numeric" type="number" step="0.01" value={cashForm.openingBalance} onChange={(e) => setCashForm({ ...cashForm, openingBalance: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <label>الحد الأقصى للرصيد</label>
+                    <input className="input numeric" type="number" step="0.01" value={cashForm.maximumBalance} onChange={(e) => setCashForm({ ...cashForm, maximumBalance: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <label>الحالة</label>
+                    <select className="input" value={cashForm.status} onChange={(e) => setCashForm({ ...cashForm, status: e.target.value as 'Active' | 'Inactive' })}>
+                      <option value="Active">نشط</option>
+                      <option value="Inactive">غير نشط</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label>الاسم بالعربية *</label>
-                  <input
-                    className="input"
-                    value={cashForm.nameAr}
-                    onChange={(e) => setCashForm({ ...cashForm, nameAr: e.target.value })}
-                    required
-                    placeholder="مثال: الخزينة الرئيسية"
-                  />
-                </div>
-                <div>
-                  <label>الاسم بالإنجليزي</label>
-                  <input
-                    className="input"
-                    value={cashForm.nameEn}
-                    onChange={(e) => setCashForm({ ...cashForm, nameEn: e.target.value })}
-                    placeholder="Main Cash Box"
-                  />
-                </div>
-                <div>
-                  <label>الفرع *</label>
-                  <select
-                    className="input"
-                    value={cashForm.branchId}
-                    onChange={(e) => setCashForm({ ...cashForm, branchId: e.target.value })}
-                    required
-                  >
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name_ar}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label>العملة *</label>
-                  <select
-                    className="input"
-                    value={cashForm.currencyId}
-                    onChange={(e) => setCashForm({ ...cashForm, currencyId: e.target.value })}
-                    required
-                  >
-                    {currencies.map((c) => (
-                      <option key={c.id} value={c.id}>{c.code} - {c.name_ar}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label>الحساب المحاسبي المرتبط (GL Account) *</label>
-                  <select
-                    className="input"
-                    value={cashForm.glAccountId}
-                    onChange={(e) => setCashForm({ ...cashForm, glAccountId: e.target.value })}
-                    required
-                  >
-                    {glAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>{a.code} - {a.name_ar}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label>الموظف المسؤول</label>
-                  <select
-                    className="input"
-                    value={cashForm.responsibleEmployeeId}
-                    onChange={(e) => setCashForm({ ...cashForm, responsibleEmployeeId: e.target.value })}
-                  >
-                    <option value="">-- اختياري --</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>{u.name_ar}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label>الرصيد الافتتاحي</label>
-                  <input
-                    className="input numeric"
-                    type="number"
-                    step="0.01"
-                    value={cashForm.openingBalance}
-                    onChange={(e) => setCashForm({ ...cashForm, openingBalance: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-                <div>
-                  <label>الحد الأقصى للرصيد</label>
-                  <input
-                    className="input numeric"
-                    type="number"
-                    step="0.01"
-                    value={cashForm.maximumBalance}
-                    onChange={(e) => setCashForm({ ...cashForm, maximumBalance: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-                <div>
-                  <label>الحالة</label>
-                  <select
-                    className="input"
-                    value={cashForm.status}
-                    onChange={(e) => setCashForm({ ...cashForm, status: e.target.value as 'Active' | 'Inactive' })}
-                  >
-                    <option value="Active">نشط</option>
-                    <option value="Inactive">غير نشط</option>
-                  </select>
+              </div>
+
+              {/* Multi-currency */}
+              <div>
+                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem', paddingBottom: '0.4rem', borderBottom: '1px solid var(--color-border)' }}>العملات المسموحة للصندوق</p>
+                <div style={{ padding: '0.85rem', background: 'var(--color-surface-variant)', borderRadius: '0.5rem', border: '1px solid var(--color-border)' }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '0 0 0.6rem' }}>لكل عملة رصيد مستقل تماماً. لا يتم دمج الأرصدة أو التحويل التلقائي بين العملات.</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.5rem' }}>
+                    {currencies.map(cur => {
+                      const isSelected = cashForm.currencyIds.includes(cur.id);
+                      return (
+                        <button key={cur.id} type="button" onClick={() => toggleCashCurrency(cur.id)}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0.75rem', borderRadius: '0.5rem', border: `2px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-outline-variant)'}`, background: isSelected ? 'var(--color-primary-container)' : 'var(--color-surface)', color: isSelected ? 'var(--color-primary)' : 'var(--color-text)', fontWeight: isSelected ? 700 : 500, cursor: 'pointer', transition: 'all 0.2s ease' }}>
+                          <span>{cur.code} - {cur.name_ar}</span>
+                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{isSelected ? 'check_box' : 'check_box_outline_blank'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
               <div>
                 <label>ملاحظات</label>
-                <textarea
-                  className="input"
-                  rows={2}
-                  value={cashForm.notes}
-                  onChange={(e) => setCashForm({ ...cashForm, notes: e.target.value })}
-                />
+                <textarea className="input" rows={2} value={cashForm.notes} onChange={(e) => setCashForm({ ...cashForm, notes: e.target.value })} />
               </div>
 
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>
                 <button type="button" className="btn btn-ghost" onClick={() => setShowCashModal(false)}>إلغاء</button>
-                <button type="submit" className="btn btn-primary">حفظ بيانات الصندوق</button>
+                <button type="submit" className="btn btn-primary">
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>save</span>
+                  حفظ بيانات الصندوق
+                </button>
               </div>
             </form>
           </div>
@@ -671,168 +754,112 @@ export default function CashBanksManagement() {
       {showBankModal && (
         <div className="modal-overlay" onClick={() => setShowBankModal(false)}>
           <div className="modal-box" style={{ maxWidth: '800px' }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '1.25rem' }}>
-              {editingId ? 'تعديل بيانات الحساب البنكي' : 'إضافة حساب بنكي جديد'}
-            </h2>
-            <form onSubmit={handleBankSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label>كود البنك (Bank Code) *</label>
-                  <input
-                    className="input numeric"
-                    value={bankForm.code}
-                    onChange={(e) => setBankForm({ ...bankForm, code: e.target.value })}
-                    required
-                    placeholder="مثال: BANK-01"
-                  />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <h2 style={{ fontSize: '1.125rem', fontWeight: 700, margin: 0 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 20, verticalAlign: 'middle', marginLeft: 8, color: 'var(--color-primary)' }}>account_balance</span>
+                {editingId ? 'تعديل بيانات الحساب البنكي' : 'إضافة حساب بنكي جديد'}
+              </h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowBankModal(false)}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+              </button>
+            </div>
+            <form onSubmit={handleBankSave} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div>
+                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem', paddingBottom: '0.4rem', borderBottom: '1px solid var(--color-border)' }}>بيانات الحساب البنكي</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label>كود البنك (Bank Code) *</label>
+                    <input className="input numeric" value={bankForm.code} onChange={(e) => setBankForm({ ...bankForm, code: e.target.value })} required placeholder="مثال: BANK-01" />
+                  </div>
+                  <div>
+                    <label>اسم البنك (عربي) *</label>
+                    <input className="input" value={bankForm.nameAr} onChange={(e) => setBankForm({ ...bankForm, nameAr: e.target.value })} required placeholder="مثال: مصرف الراجحي" />
+                  </div>
+                  <div>
+                    <label>اسم البنك (إنجليزي)</label>
+                    <input className="input" value={bankForm.nameEn} onChange={(e) => setBankForm({ ...bankForm, nameEn: e.target.value })} placeholder="Al Rajhi Bank" />
+                  </div>
+                  <div>
+                    <label>رقم الحساب البنكي *</label>
+                    <input className="input numeric" value={bankForm.accountNumber} onChange={(e) => setBankForm({ ...bankForm, accountNumber: e.target.value })} required placeholder="1234567890" />
+                  </div>
+                  <div>
+                    <label>رقم الآيبان (IBAN)</label>
+                    <input className="input numeric" value={bankForm.iban} onChange={(e) => setBankForm({ ...bankForm, iban: e.target.value })} placeholder="SA0000000000000000000000" />
+                  </div>
+                  <div>
+                    <label>رمز السويفت (SWIFT Code)</label>
+                    <input className="input numeric" value={bankForm.swift} onChange={(e) => setBankForm({ ...bankForm, swift: e.target.value })} placeholder="RJHISASA" />
+                  </div>
+                  <div>
+                    <label>الفرع *</label>
+                    <select className="input" value={bankForm.branchId} onChange={(e) => setBankForm({ ...bankForm, branchId: e.target.value })} required>
+                      {branches.map((b) => (<option key={b.id} value={b.id}>{b.name_ar}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label>الحساب المحاسبي (GL Account) *</label>
+                    <select className="input" value={bankForm.glAccountId} onChange={(e) => setBankForm({ ...bankForm, glAccountId: e.target.value })} required>
+                      {glAccounts.map((a) => (<option key={a.id} value={a.id}>{a.code} - {a.name_ar}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label>الشخص المسؤول / الاتصال</label>
+                    <input className="input" value={bankForm.contactPerson} onChange={(e) => setBankForm({ ...bankForm, contactPerson: e.target.value })} />
+                  </div>
+                  <div>
+                    <label>الهاتف</label>
+                    <input className="input numeric" value={bankForm.phone} onChange={(e) => setBankForm({ ...bankForm, phone: e.target.value })} />
+                  </div>
+                  <div>
+                    <label>البريد الإلكتروني</label>
+                    <input className="input" type="email" value={bankForm.email} onChange={(e) => setBankForm({ ...bankForm, email: e.target.value })} />
+                  </div>
+                  <div>
+                    <label>الرصيد الافتتاحي</label>
+                    <input className="input numeric" type="number" step="0.01" value={bankForm.openingBalance} onChange={(e) => setBankForm({ ...bankForm, openingBalance: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <label>الحالة</label>
+                    <select className="input" value={bankForm.status} onChange={(e) => setBankForm({ ...bankForm, status: e.target.value as 'Active' | 'Inactive' })}>
+                      <option value="Active">نشط</option>
+                      <option value="Inactive">غير نشط</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label>اسم البنك (عربي) *</label>
-                  <input
-                    className="input"
-                    value={bankForm.nameAr}
-                    onChange={(e) => setBankForm({ ...bankForm, nameAr: e.target.value })}
-                    required
-                    placeholder="مثال: مصرف الراجحي"
-                  />
-                </div>
-                <div>
-                  <label>اسم البنك (إنجليزي)</label>
-                  <input
-                    className="input"
-                    value={bankForm.nameEn}
-                    onChange={(e) => setBankForm({ ...bankForm, nameEn: e.target.value })}
-                    placeholder="Al Rajhi Bank"
-                  />
-                </div>
-                <div>
-                  <label>رقم الحساب البنكي *</label>
-                  <input
-                    className="input numeric"
-                    value={bankForm.accountNumber}
-                    onChange={(e) => setBankForm({ ...bankForm, accountNumber: e.target.value })}
-                    required
-                    placeholder="1234567890"
-                  />
-                </div>
-                <div>
-                  <label>رقم الآيبان (IBAN)</label>
-                  <input
-                    className="input numeric"
-                    value={bankForm.iban}
-                    onChange={(e) => setBankForm({ ...bankForm, iban: e.target.value })}
-                    placeholder="SA0000000000000000000000"
-                  />
-                </div>
-                <div>
-                  <label>رمز السويفت (SWIFT Code)</label>
-                  <input
-                    className="input numeric"
-                    value={bankForm.swift}
-                    onChange={(e) => setBankForm({ ...bankForm, swift: e.target.value })}
-                    placeholder="RJHISASA"
-                  />
-                </div>
-                <div>
-                  <label>الفرع *</label>
-                  <select
-                    className="input"
-                    value={bankForm.branchId}
-                    onChange={(e) => setBankForm({ ...bankForm, branchId: e.target.value })}
-                    required
-                  >
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name_ar}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label>العملة *</label>
-                  <select
-                    className="input"
-                    value={bankForm.currencyId}
-                    onChange={(e) => setBankForm({ ...bankForm, currencyId: e.target.value })}
-                    required
-                  >
-                    {currencies.map((c) => (
-                      <option key={c.id} value={c.id}>{c.code} - {c.name_ar}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label>الحساب المحاسبي (GL Account) *</label>
-                  <select
-                    className="input"
-                    value={bankForm.glAccountId}
-                    onChange={(e) => setBankForm({ ...bankForm, glAccountId: e.target.value })}
-                    required
-                  >
-                    {glAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>{a.code} - {a.name_ar}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label>الشخص المسؤول / الاتصال</label>
-                  <input
-                    className="input"
-                    value={bankForm.contactPerson}
-                    onChange={(e) => setBankForm({ ...bankForm, contactPerson: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label>الهاتف</label>
-                  <input
-                    className="input numeric"
-                    value={bankForm.phone}
-                    onChange={(e) => setBankForm({ ...bankForm, phone: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label>البريد الإلكتروني</label>
-                  <input
-                    className="input"
-                    type="email"
-                    value={bankForm.email}
-                    onChange={(e) => setBankForm({ ...bankForm, email: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label>الرصيد الافتتاحي</label>
-                  <input
-                    className="input numeric"
-                    type="number"
-                    step="0.01"
-                    value={bankForm.openingBalance}
-                    onChange={(e) => setBankForm({ ...bankForm, openingBalance: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-                <div>
-                  <label>الحالة</label>
-                  <select
-                    className="input"
-                    value={bankForm.status}
-                    onChange={(e) => setBankForm({ ...bankForm, status: e.target.value as 'Active' | 'Inactive' })}
-                  >
-                    <option value="Active">نشط</option>
-                    <option value="Inactive">غير نشط</option>
-                  </select>
+              </div>
+
+              {/* Multi-currency */}
+              <div>
+                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem', paddingBottom: '0.4rem', borderBottom: '1px solid var(--color-border)' }}>العملات المسموحة للحساب البنكي</p>
+                <div style={{ padding: '0.85rem', background: 'var(--color-surface-variant)', borderRadius: '0.5rem', border: '1px solid var(--color-border)' }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '0 0 0.6rem' }}>لكل عملة رصيد مستقل. لا يتم دمج الأرصدة أو التحويل التلقائي بين العملات.</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.5rem' }}>
+                    {currencies.map(cur => {
+                      const isSelected = bankForm.currencyIds.includes(cur.id);
+                      return (
+                        <button key={cur.id} type="button" onClick={() => toggleBankCurrency(cur.id)}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0.75rem', borderRadius: '0.5rem', border: `2px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-outline-variant)'}`, background: isSelected ? 'var(--color-primary-container)' : 'var(--color-surface)', color: isSelected ? 'var(--color-primary)' : 'var(--color-text)', fontWeight: isSelected ? 700 : 500, cursor: 'pointer', transition: 'all 0.2s ease' }}>
+                          <span>{cur.code} - {cur.name_ar}</span>
+                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{isSelected ? 'check_box' : 'check_box_outline_blank'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
               <div>
                 <label>ملاحظات</label>
-                <textarea
-                  className="input"
-                  rows={2}
-                  value={bankForm.notes}
-                  onChange={(e) => setBankForm({ ...bankForm, notes: e.target.value })}
-                />
+                <textarea className="input" rows={2} value={bankForm.notes} onChange={(e) => setBankForm({ ...bankForm, notes: e.target.value })} />
               </div>
 
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>
                 <button type="button" className="btn btn-ghost" onClick={() => setShowBankModal(false)}>إلغاء</button>
-                <button type="submit" className="btn btn-primary">حفظ الحساب البنكي</button>
+                <button type="submit" className="btn btn-primary">
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>save</span>
+                  حفظ الحساب البنكي
+                </button>
               </div>
             </form>
           </div>
